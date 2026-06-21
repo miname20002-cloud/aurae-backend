@@ -30,7 +30,7 @@ export async function signup(params: {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Signup failed (${response.status}): ${body}`);
+    throw new Error(`Signup failed (${response.status}): ${body} | sent companionId="${params.companionId}"`);
   }
 
   return response.json();
