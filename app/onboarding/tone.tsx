@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import Screen from "@/components/Screen";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 import { useOnboarding } from "@/context/OnboardingContext";
@@ -37,14 +37,15 @@ export default function ToneScreen() {
         params: { userId: String(result.user_id), companion: result.companion },
       });
     } catch (err) {
-      setError("Couldn't connect right now. Check your connection and try again.");
+      const detail = err instanceof Error ? err.message : String(err);
+      setError(`Couldn't connect right now. (${detail})`);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Choose conversation style</Text>
         <Text style={styles.body}>Tune the behavioral matrix of your entity.</Text>
@@ -75,7 +76,7 @@ export default function ToneScreen() {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
