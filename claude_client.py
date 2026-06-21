@@ -28,13 +28,15 @@ def _get_client():
     return _client
 
 
-def generate_reply(system_prompt: str, history: list[dict], max_tokens: int = 400) -> str:
+def generate_reply(system_prompt: str, history: list[dict], max_tokens: int = 400, model: str | None = None) -> str:
     """
     history: list of {"role": "user"|"assistant", "content": str}
+    model: override which model replies - lets the caller route free-tier
+    users to the cheaper FAST_MODEL and premium users to the full MODEL.
     """
     client = _get_client()
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model or MODEL,
         max_tokens=max_tokens,
         messages=[{"role": "system", "content": system_prompt}] + history,
     )

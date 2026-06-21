@@ -24,6 +24,9 @@ class User(Base):
     age_verified = Column(Boolean, default=False, nullable=False)
     companion_id = Column(String, nullable=True)  # chloe / maya / ethan / jayden
     last_emotion_asset = Column(String, nullable=True)  # filename only, e.g. "Chloe_wink2.mp4"
+    tier = Column(String, default="free", nullable=False)  # "free" | "premium"
+    daily_message_count = Column(Integer, default=0, nullable=False)
+    daily_count_date = Column(String, nullable=True)  # "YYYY-MM-DD", resets count when it changes
     created_at = Column(DateTime, default=datetime.utcnow)
 
     messages = relationship("ChatMessage", back_populates="user")

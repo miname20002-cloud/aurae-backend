@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from datetime import date
+
 import asset_map
 import claude_client
 import mood as mood_module
@@ -22,6 +24,19 @@ engine = get_engine()
 
 # how many user turns between insight-extraction passes
 INSIGHT_REFRESH_INTERVAL = 6
+
+# free tier: cheaper model, capped messages per day. crisis messages never
+# count against this limit and never get downgraded - safety always runs
+# on the full pipeline regardless of tier.
+FREE_DAILY_MESSAGE_LIMIT = 25
+FREE_TIER_REPLY_MODEL = claude_client.FAST_MODEL
+PREMIUM_TIER_REPLY_MODEL = claude_client.MODEL
+
+LIMIT_REACHED_REPLY = (
+    "{name} smiles. \"hey, you've used up today's messages with me - I'll be right "
+    "here when they reset tomorrow. if you don't want to wait, Aurae Premium gets you "
+    "unlimited time together.\""
+)
 
 EMO_TAG_PATTERN = re.compile(r"\[EMO:(\w+)\]")
 EMOTION_INSTRUCTION = (
@@ -49,6 +64,31 @@ class SignupRequest(BaseModel):
 class ChatRequest(BaseModel):
     user_id: int
     message: str
+
+
+class SetTierRequest(BaseModel):
+    user_id: int
+    tier: str  # "free" | "premium"
+
+
+@app.post("/debug/set-tier")
+def debug_set_tier(req: SetTierRequest):
+    """
+    TEMPORARY: manually flips a user's tier for testing the free/premium
+    split before real App Store / Play Store purchase verification is wired
+    up. Remove or lock this down (e.g. behind an admin secret) before any
+    real users are on the system - right now anyone who finds this endpoint
+    could grant themselves premium for free.
+    """
+    if req.tier not in ("free", "premium"):
+        raise HTTPException(status_code=400, detail="tier must be 'free' or 'premium'.")
+    session = get_session(engine)
+    user = session.get(User, req.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    user.tier = req.tier
+    session.commit()
+    return {"user_id": user.id, "tier": user.tier}
 
 
 @app.get("/debug/personas")
@@ -116,7 +156,9 @@ def chat(req: ChatRequest):
     persona = PERSONAS[user.companion_id]
 
     # Crisis screening always runs first, and the persona LLM is never the
-    # thing deciding whether this path triggers.
+    # thing deciding whether this path triggers. Crisis turns are exempt
+    # from the daily limit and never get downgraded to the cheaper model -
+    # safety doesn't get rationed by subscription tier.
     if safety.screen_for_crisis(req.message):
         reply = safety.build_crisis_response(persona["name"])
         session.add(ChatMessage(user_id=user.id, role="user", content=req.message))
@@ -126,6 +168,27 @@ def chat(req: ChatRequest):
         user.last_emotion_asset = os.path.basename(asset_path)
         session.commit()
         return {"reply": reply, "crisis_flagged": True, "emotion_tag": "neutral", "asset_path": asset_path}
+
+    # Daily message count, reset on UTC date change.
+    today = date.today().isoformat()
+    if user.daily_count_date != today:
+        user.daily_count_date = today
+        user.daily_message_count = 0
+        session.commit()
+
+    if user.tier != "premium" and user.daily_message_count >= FREE_DAILY_MESSAGE_LIMIT:
+        reply = LIMIT_REACHED_REPLY.format(name=persona["name"])
+        asset_path = asset_map.resolve_asset(user.companion_id, "neutral", user.last_emotion_asset)
+        return {
+            "reply": reply,
+            "mood": "neutral",
+            "emotion_tag": "neutral",
+            "asset_path": asset_path,
+            "crisis_flagged": False,
+            "limit_reached": True,
+        }
+
+    reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
 
     profile = session.get(UserInsightProfile, user.id)
 
@@ -147,7 +210,7 @@ def chat(req: ChatRequest):
     history = [{"role": m.role if m.role == "user" else "assistant", "content": m.content} for m in reversed(recent)]
     history.append({"role": "user", "content": req.message})
 
-    raw_reply = claude_client.generate_reply(system_prompt, history)
+    raw_reply = claude_client.generate_reply(system_prompt, history, model=reply_model)
 
     match = EMO_TAG_PATTERN.search(raw_reply)
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "neutral"
@@ -155,6 +218,7 @@ def chat(req: ChatRequest):
 
     asset_path = asset_map.resolve_asset(user.companion_id, emotion_tag, user.last_emotion_asset)
     user.last_emotion_asset = os.path.basename(asset_path)
+    user.daily_message_count += 1
 
     session.add(ChatMessage(user_id=user.id, role="user", content=req.message))
     session.add(ChatMessage(user_id=user.id, role="assistant", content=reply))
