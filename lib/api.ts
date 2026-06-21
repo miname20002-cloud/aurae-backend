@@ -1,4 +1,8 @@
-const API_BASE_URL = "https://aurae-backend-fukx.onrender.com";
+export const API_BASE_URL = "https://aurae-backend-fukx.onrender.com";
+
+export function assetUrl(relativePath: string): string {
+  return `${API_BASE_URL}/${relativePath}`;
+}
 
 export type SignupResponse = {
   user_id: number;
