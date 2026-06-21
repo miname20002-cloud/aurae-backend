@@ -1,13 +1,44 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
+import { getSession } from "@/lib/session";
 
 export default function MainPage() {
   const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSession().then((session) => {
+      if (cancelled) return;
+      if (session) {
+        router.replace({
+          pathname: "/chat",
+          params: { userId: String(session.userId), companion: session.companion },
+        });
+      } else {
+        setCheckingSession(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleGetStarted() {
     router.push("/onboarding/age-gate");
+  }
+
+  if (checkingSession) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
