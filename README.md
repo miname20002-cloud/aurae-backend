@@ -55,37 +55,28 @@ environment at runtime.
 
 ## Wiring up your character video assets
 
-The real per-character folders aren't shaped the same way - `asset_map.py`
-hardcodes each character's actual file list rather than assuming one naming
-convention, because they genuinely differ:
+All four characters now share the same shape:
 
 ```
 assets/
-  Chloe_Assets/   Chloe_neutral.mp4  Chloe_neutral2.mp4  Chloe_smile.mp4
-                  Chloe_blush.mp4    Chloe_pout.mp4       Chloe_think.mp4
-                  Chloe_wink.mp4     Chloe_wink2.mp4      Chloe_question.mp4
-                  face.png                  <- note: no character prefix
-  Ethan_Assets/   Ethan_neutral.mp4  Ethan_smile.mp4  Ethan_joy.mp4
-                  Ethan_think.mp4    Ethan_wink.mp4   Ethan_question.mp4
-                  Ethan_face.png
-  Jayden_Assets/  same shape as Ethan, "Jayden_" prefix
-  Maya_Assets/    same shape as Ethan, but think has two variants:
+  Chloe_Assets/   Chloe_neutral.mp4  Chloe_smile.mp4  Chloe_joy.mp4
+                  Chloe_think.mp4    Chloe_wink.mp4   Chloe_question.mp4
+                  Chloe_face.png
+  Ethan_Assets/   same pattern, "Ethan_" prefix
+  Jayden_Assets/  same pattern, "Jayden_" prefix
+  Maya_Assets/    same pattern, but think has two variants:
                   Maya_think.mp4  Maya_think1.mp4
 ```
 
-The model picks from one shared 8-tag vocabulary every turn (`neutral,
-smile, joy, blush, pout, think, wink, question`), but not every character
-has a file for every tag — only Chloe has `blush`/`pout`, only Ethan/Jayden/
-Maya have `joy`. Each tag resolves through a fallback chain
-(`asset_map.FALLBACK_CHAIN`) to the closest thing that character actually
-has, so every tag is always resolvable for every character without the
-model needing to know which character has which files.
+The model still picks from an 8-tag vocabulary (`neutral, smile, joy,
+blush, pout, think, wink, question`) — `blush`/`pout` aren't in anyone's
+file set right now, so they fall back through `asset_map.FALLBACK_CHAIN`
+to the nearest emotion (`blush` → `joy`, `pout` → `think`). If you add
+those clips for any character later, just add them to that character's
+`emotion_files` in `asset_map.py` and they'll be picked up automatically.
 
-If you add more characters or more emotion clips later, add them to
-`CHARACTER_ASSETS` in `asset_map.py` rather than relying on a shared
-naming pattern - that's the part of this codebase most likely to need a
-hand edit per new asset batch. Worth standardizing the naming convention
-for future batches if you want to cut down on this kind of one-off mapping.
+If you add more characters later, add them to `CHARACTER_ASSETS` in
+`asset_map.py`, ideally following this same 6-file shape.
 
 `main.py` auto-mounts this folder at `/assets` if it exists, so a returned
 `asset_path` like `assets/Chloe_Assets/Chloe_smile.mp4` is directly
@@ -95,8 +86,9 @@ path to a CDN-synced directory instead.
 
 Every `/chat` reply returns `emotion_tag` and `asset_path` — the model
 picks one tag every turn via `[EMO:...]`, which is parsed out before the
-text reaches the user. Variants (`neutral`/`neutral2`, `wink`/`wink2`,
-`think`/`think1`) rotate so the same clip never plays twice in a row.
+text reaches the user. Maya's `think`/`think1` pair rotates so the same
+clip never plays twice in a row; everyone else currently has one file per
+emotion, so there's nothing to rotate until more variants are added.
 
 ## Mood + cultural resonance + real-time info
 

@@ -1,24 +1,15 @@
 """
-Maps the persona's emotion tag to an actual asset filename, based on the
-*actual* files that exist per character right now - not a single shared
-naming convention, since the real folders aren't consistent with each other:
+Maps the persona's emotion tag to an actual asset filename. All four
+characters now share the same 6-emotion set (neutral, smile, joy, think,
+wink, question) and a "{Name}_face.png" avatar image — Chloe's assets were
+recently renamed to match Ethan/Jayden/Maya's convention. The one remaining
+one-off: Maya has two variants for "think" (Maya_think.mp4, Maya_think1.mp4),
+everyone else has exactly one file per emotion.
 
-  Chloe:  blush, neutral, neutral2, pout, question, smile, think, wink, wink2
-          face image is bare "face.png" (no character prefix)
-  Ethan:  joy, neutral, question, smile, think, wink
-          face image is "Ethan_face.png"
-  Jayden: joy, neutral, question, smile, think, wink
-          face image is "Jayden_face.png"
-  Maya:   joy, neutral, question, smile, think, think1, wink
-          face image is "Maya_face.png"
-
-Because the emotion sets differ per character (only Chloe has blush/pout;
-only Ethan/Jayden/Maya have joy; only Maya has a think/think1 pair instead
-of neutral2/wink2), the model is given a single shared tag vocabulary
-(EMOTION_TAGS) and each tag resolves through a fallback chain to whatever
-that specific character actually has on disk. This means every tag is
-always resolvable for every character, even though the underlying file
-sets aren't the same shape.
+The model is still given a wider tag vocabulary (EMOTION_TAGS) than any
+single character's file set, with blush/pout falling back to the nearest
+available emotion through FALLBACK_CHAIN. This keeps the system resilient
+if a future character ships with a richer or different emotion set again.
 
 Folders are expected at: assets/{Folder}/{filename}
 e.g. assets/Chloe_Assets/Chloe_smile.mp4
@@ -47,14 +38,13 @@ FALLBACK_CHAIN = {
 CHARACTER_ASSETS = {
     "chloe": {
         "dir": "Chloe_Assets",
-        "face": "face.png",
+        "face": "Chloe_face.png",
         "emotion_files": {
-            "neutral": ["Chloe_neutral.mp4", "Chloe_neutral2.mp4"],
+            "neutral": ["Chloe_neutral.mp4"],
             "smile": ["Chloe_smile.mp4"],
-            "blush": ["Chloe_blush.mp4"],
-            "pout": ["Chloe_pout.mp4"],
+            "joy": ["Chloe_joy.mp4"],
             "think": ["Chloe_think.mp4"],
-            "wink": ["Chloe_wink.mp4", "Chloe_wink2.mp4"],
+            "wink": ["Chloe_wink.mp4"],
             "question": ["Chloe_question.mp4"],
         },
     },
