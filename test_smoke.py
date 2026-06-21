@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 captured_system_prompts = []
 
 
-def fake_generate_reply(system_prompt, history, max_tokens=400):
+def fake_generate_reply(system_prompt, history, max_tokens=400, model=None):
     captured_system_prompts.append(system_prompt)
     return "okay that's actually so real, tell me more [EMO:smile]"
 
@@ -82,3 +82,49 @@ assert profile.comfort_style == "gentle"
 print("PASS: insight profile updated ->", profile.emotional_patterns, profile.comfort_style, "level", profile.relationship_level)
 
 print("\nALL CHECKS PASSED")
+
+# 7. Free tier: hits daily limit after FREE_DAILY_MESSAGE_LIMIT messages
+import main as _main
+free_user_id = client.post("/signup", json={
+    "name": "FreeUser", "age_confirmed": True, "gender_preference": "male",
+    "companion_id": "ethan", "initial_tone": "gentle"
+}).json()["user_id"]
+
+_main.FREE_DAILY_MESSAGE_LIMIT = 2  # shrink for a fast test
+for i in range(2):
+    r = client.post("/chat", json={"user_id": free_user_id, "message": f"msg {i}"})
+    assert r.json().get("limit_reached") is not True, r.json()
+
+r = client.post("/chat", json={"user_id": free_user_id, "message": "one more"})
+body = r.json()
+assert body["limit_reached"] is True, body
+assert "Premium" in body["reply"]
+print("PASS: free tier hits daily limit ->", body["reply"][:60] + "...")
+
+# 8. Premium tier: never limited, uses the better model
+session = main.get_session(main.engine)
+free_user = session.get(main.User, free_user_id)
+free_user.tier = "premium"
+free_user.daily_message_count = 0
+session.commit()
+
+captured_models = []
+original_generate_reply = claude_client.generate_reply
+def tracking_generate_reply(system_prompt, history, max_tokens=400, model=None):
+    captured_models.append(model)
+    return fake_generate_reply(system_prompt, history, max_tokens)
+claude_client.generate_reply = tracking_generate_reply
+
+r = client.post("/chat", json={"user_id": free_user_id, "message": "hey again"})
+assert r.json().get("limit_reached") is not True
+assert captured_models[-1] == claude_client.MODEL, captured_models
+print("PASS: premium tier uses full model, no limit ->", captured_models[-1])
+
+claude_client.generate_reply = original_generate_reply
+
+# 9. /debug/set-tier works
+r = client.post("/debug/set-tier", json={"user_id": free_user_id, "tier": "free"})
+assert r.json() == {"user_id": free_user_id, "tier": "free"}
+print("PASS: /debug/set-tier ->", r.json())
+
+print("\nALL CHECKS PASSED (tiering)")
