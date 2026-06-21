@@ -51,6 +51,11 @@ class ChatRequest(BaseModel):
     message: str
 
 
+@app.get("/debug/personas")
+def debug_personas():
+    return {"companion_ids": list(PERSONAS.keys())}
+
+
 @app.post("/signup")
 def signup(req: SignupRequest):
     if not req.age_confirmed:
