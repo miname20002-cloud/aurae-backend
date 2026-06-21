@@ -9,6 +9,29 @@ export type SignupResponse = {
   companion: string;
 };
 
+export type ChatResponse = {
+  reply: string;
+  mood?: string;
+  emotion_tag: string;
+  asset_path: string;
+  crisis_flagged: boolean;
+};
+
+export async function chat(params: { userId: number; message: string }): Promise<ChatResponse> {
+  const response = await fetch(`${API_BASE_URL}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: params.userId, message: params.message }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Chat failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
 export async function signup(params: {
   name: string;
   ageConfirmed: boolean;
