@@ -37,10 +37,15 @@ assert r.status_code == 403, r.text
 print("PASS: signup blocked without age confirmation")
 
 # 2. Signup succeeds with age confirmation
-r = client.post("/signup", json={"name": "Sam", "age_confirmed": True, "gender_preference": "female", "companion_id": "chloe"})
+r = client.post("/signup", json={"name": "Sam", "age_confirmed": True, "gender_preference": "female", "companion_id": "chloe", "initial_tone": "witty"})
 assert r.status_code == 200, r.text
 user_id = r.json()["user_id"]
 print("PASS: signup succeeded, user_id =", user_id)
+
+session = main.get_session(main.engine)
+profile = session.get(main.UserInsightProfile, user_id)
+assert profile.comfort_style == "witty"
+print("PASS: initial_tone seeded comfort_style ->", profile.comfort_style)
 
 # 3. Normal chat: mood detected, EMO tag parsed out of the visible reply, asset resolved
 r = client.post("/chat", json={"user_id": user_id, "message": "i had a really stressful day at work"})

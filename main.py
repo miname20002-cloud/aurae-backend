@@ -41,6 +41,7 @@ class SignupRequest(BaseModel):
     age_confirmed: bool
     gender_preference: str  # "female" | "male"
     companion_id: str       # one of PERSONAS keys
+    initial_tone: str = "unknown"  # "gentle" | "witty" | "unknown" - seeds comfort_style
 
 
 class ChatRequest(BaseModel):
@@ -61,7 +62,7 @@ def signup(req: SignupRequest):
     user = User(name=req.name, age_verified=True, companion_id=req.companion_id)
     session.add(user)
     session.commit()
-    session.add(UserInsightProfile(user_id=user.id))
+    session.add(UserInsightProfile(user_id=user.id, comfort_style=req.initial_tone))
     session.commit()
     return {"user_id": user.id, "companion": PERSONAS[req.companion_id]["name"]}
 
