@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { View, Text, Pressable, StyleSheet, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 
 export default function AgeGate() {
   const router = useRouter();
-  const [confirmed, setConfirmed] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const canContinue = ageConfirmed && termsAccepted;
 
   function handleContinue() {
-    if (!confirmed) return;
-    // Next step wires this to the name-entry screen.
-    Alert.alert("Coming up next", "This will lead into the name screen.");
+    if (!canContinue) return;
+    router.push("/onboarding/name");
   }
 
   return (
@@ -25,13 +27,25 @@ export default function AgeGate() {
 
         <Pressable
           style={styles.checkboxRow}
-          onPress={() => setConfirmed((prev) => !prev)}
+          onPress={() => setAgeConfirmed((prev) => !prev)}
         >
-          <View style={[styles.checkbox, confirmed && styles.checkboxChecked]}>
-            {confirmed && <View style={styles.checkboxDot} />}
+          <View style={[styles.checkbox, ageConfirmed && styles.checkboxChecked]}>
+            {ageConfirmed && <View style={styles.checkboxDot} />}
           </View>
           <Text style={styles.checkboxLabel}>
             I confirm I am 18 years of age or older
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.checkboxRow}
+          onPress={() => setTermsAccepted((prev) => !prev)}
+        >
+          <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+            {termsAccepted && <View style={styles.checkboxDot} />}
+          </View>
+          <Text style={styles.checkboxLabel}>
+            I agree to the Terms of Service and Privacy Policy
           </Text>
         </Pressable>
       </View>
@@ -39,14 +53,14 @@ export default function AgeGate() {
       <View style={styles.bottom}>
         <Pressable
           onPress={handleContinue}
-          disabled={!confirmed}
+          disabled={!canContinue}
           style={({ pressed }) => [
             styles.cta,
-            !confirmed && styles.ctaDisabled,
-            confirmed && pressed && styles.ctaPressed,
+            !canContinue && styles.ctaDisabled,
+            canContinue && pressed && styles.ctaPressed,
           ]}
         >
-          <Text style={[styles.ctaText, !confirmed && styles.ctaTextDisabled]}>
+          <Text style={[styles.ctaText, !canContinue && styles.ctaTextDisabled]}>
             Continue
           </Text>
         </Pressable>
