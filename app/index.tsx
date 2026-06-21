@@ -1,11 +1,13 @@
-import { View, Text, Pressable, StyleSheet, Alert } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 
 export default function MainPage() {
+  const router = useRouter();
+
   function handleGetStarted() {
-    // Next step wires this to the onboarding flow (age-gate -> name -> ...).
-    Alert.alert("Coming up next", "This will lead into onboarding.");
+    router.push("/onboarding/age-gate");
   }
 
   return (
