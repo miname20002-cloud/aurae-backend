@@ -68,40 +68,44 @@ export default function ChatScreen() {
 
   return (
     <Screen style={styles.container}>
-      <View style={styles.header}>
-        {companion && (
-          <Image source={{ uri: assetUrl(companion.facePath) }} style={styles.avatar} />
-        )}
-        <View style={styles.headerText}>
-          <Text style={styles.name}>{companion?.name ?? companionName ?? "Your soul friend"}</Text>
-          {mood && <Text style={styles.mood}>{mood}</Text>}
-        </View>
-      </View>
-
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messages}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.bubble,
-              item.role === "user" ? styles.bubbleUser : styles.bubbleAssistant,
-            ]}
-          >
-            <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
-              {item.text}
-            </Text>
+      <KeyboardAvoidingView
+        style={styles.flexFill}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
+      >
+        <View style={styles.header}>
+          {companion && (
+            <Image source={{ uri: assetUrl(companion.facePath) }} style={styles.avatar} />
+          )}
+          <View style={styles.headerText}>
+            <Text style={styles.name}>{companion?.name ?? companionName ?? "Your soul friend"}</Text>
+            {mood && <Text style={styles.mood}>{mood}</Text>}
           </View>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
-        }
-      />
+        </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+        <FlatList
+          data={messages}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.messages}
+          renderItem={({ item }) => (
+            <View
+              style={[
+                styles.bubble,
+                item.role === "user" ? styles.bubbleUser : styles.bubbleAssistant,
+              ]}
+            >
+              <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
+                {item.text}
+              </Text>
+            </View>
+          )}
+          ListEmptyComponent={
+            <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
+          }
+        />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {error && <Text style={styles.error}>{error}</Text>}
+
         <View style={styles.inputRow}>
           <TextInput
             value={input}
@@ -127,6 +131,9 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  flexFill: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -204,7 +211,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg, 
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
