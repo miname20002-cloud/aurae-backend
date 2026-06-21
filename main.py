@@ -31,9 +31,11 @@ EMOTION_INSTRUCTION = (
     "never omit it, never output more than one."
 )
 
-ASSETS_DIR = os.path.join(os.path.dirname(__file__), asset_map.ASSET_ROOT)
-if os.path.isdir(ASSETS_DIR):
-    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+ASSETS_PARENT_DIR = os.path.dirname(__file__)
+for _char_dir in ["Chloe_Assets", "Ethan_Assets", "Jayden_Assets", "Maya_Assets"]:
+    _full_path = os.path.join(ASSETS_PARENT_DIR, _char_dir)
+    if os.path.isdir(_full_path):
+        app.mount(f"/assets/{_char_dir}", StaticFiles(directory=_full_path), name=_char_dir)
 
 
 class SignupRequest(BaseModel):
