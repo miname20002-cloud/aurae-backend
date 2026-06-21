@@ -1,9 +1,28 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useState } from "react";
+import { View, Text, Pressable, Image, StyleSheet } from "react-native";
+import Screen from "@/components/Screen";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 import { useOnboarding } from "@/context/OnboardingContext";
-import { companionsFor } from "@/lib/companions";
+import { companionsFor, Companion } from "@/lib/companions";
+import { assetUrl } from "@/lib/api";
+
+function CompanionAvatar({ companion }: { companion: Companion }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  return (
+    <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
+      {!imageFailed && (
+        <Image
+          source={{ uri: assetUrl(companion.facePath) }}
+          style={styles.avatarImage}
+          onError={() => setImageFailed(true)}
+        />
+      )}
+      {imageFailed && <Text style={styles.avatarText}>{companion.initial}</Text>}
+    </View>
+  );
+}
 
 export default function CompanionScreen() {
   const router = useRouter();
@@ -20,7 +39,7 @@ export default function CompanionScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Pick your soul match</Text>
         <Text style={styles.body}>Choose who feels right.</Text>
@@ -32,9 +51,7 @@ export default function CompanionScreen() {
               onPress={() => choose(companion.id)}
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
-              <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
-                <Text style={styles.avatarText}>{companion.initial}</Text>
-              </View>
+              <CompanionAvatar companion={companion} />
               <Text style={styles.optionText}>{companion.name}</Text>
             </Pressable>
           ))}
@@ -46,7 +63,7 @@ export default function CompanionScreen() {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
@@ -95,6 +112,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
   },
   avatarText: {
     fontSize: 18,
