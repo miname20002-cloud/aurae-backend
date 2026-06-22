@@ -17,11 +17,11 @@ export default function NameScreen() {
     const trimmed = input.trim();
 
     if (trimmed.length < 2) {
-      setError("이름은 최소 2글자 이상 입력해주세요.");
+      setError("Name must be at least 2 characters.");
       return;
     }
     if (!NAME_REGEX.test(trimmed)) {
-      setError("한글 또는 영문만 사용할 수 있어요 (숫자/특수문자/이모지 불가).");
+      setError("Letters only - no numbers, symbols, or emojis.");
       return;
     }
 
@@ -50,6 +50,9 @@ export default function NameScreen() {
           onSubmitEditing={handleNext}
           maxLength={20}
         />
+        <Text style={styles.notice}>
+          ⚠️ Your name can't be changed after signup. Choose carefully.
+        </Text>
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
       <View style={styles.bottom}>
@@ -105,6 +108,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textPrimary,
     backgroundColor: colors.surface,
+  },
+  notice: {
+    marginTop: spacing.sm,
+    fontSize: 12,
+    color: colors.textTertiary,
   },
   error: {
     marginTop: spacing.sm,
