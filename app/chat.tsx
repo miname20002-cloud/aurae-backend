@@ -30,6 +30,18 @@ function defaultNeutralPath(companionId: string): string {
   return `assets/${cap}_Assets/${cap}_neutral.mp4`;
 }
 
+// 캐릭터 감정에 따라 프레임 바깥에 보일 연한 색 링
+const EMOTION_GLOW: Record<string, string> = {
+  neutral: "transparent",
+  smile: "rgba(255, 214, 107, 0.35)",
+  joy: "rgba(255, 184, 77, 0.4)",
+  blush: "rgba(255, 143, 171, 0.4)",
+  pout: "rgba(155, 140, 255, 0.35)",
+  think: "rgba(110, 201, 255, 0.35)",
+  wink: "rgba(255, 143, 203, 0.35)",
+  question: "rgba(140, 217, 255, 0.35)",
+};
+
 export default function ChatScreen() {
   const { companion: companionName } = useLocalSearchParams<{
     userId: string;
@@ -42,17 +54,17 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [mood, setMood] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(initialPath);
+  const [currentEmotion, setCurrentEmotion] = useState<string>("neutral");
   const nextId = useRef(0);
+  const listRef = useRef<FlatList>(null);
 
   const player = useVideoPlayer(initialPath ? assetUrl(initialPath) : null, (p) => {
     p.loop = true;
     p.play();
   });
 
-  // 화면 처음 열릴 때: 백엔드에 저장된 최근 대화 기록 + 마지막 감정상태 불러오기
   useEffect(() => {
     (async () => {
       try {
@@ -73,7 +85,7 @@ export default function ChatScreen() {
           setCurrentAssetPath(history.asset_path);
         }
       } catch {
-        // 기록 불러오기 실패해도 그냥 빈 화면으로 시작 (치명적이지 않음)
+        // 기록 불러오기 실패해도 그냥 빈 화면으로 시작
       }
     })();
   }, []);
@@ -86,7 +98,6 @@ export default function ChatScreen() {
     player.play();
   }, [currentAssetPath]);
 
-  // 앱이 백그라운드 갔다가 다시 돌아올 때 영상 재생 다시 트리거
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
@@ -113,8 +124,8 @@ export default function ChatScreen() {
     try {
       const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
-      setMood(result.mood ?? null);
       setCurrentAssetPath(result.asset_path);
+      setCurrentEmotion(result.emotion_tag ?? "neutral");
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -122,6 +133,8 @@ export default function ChatScreen() {
       setSending(false);
     }
   }
+
+  const glowColor = EMOTION_GLOW[currentEmotion] ?? "transparent";
 
   return (
     <Screen style={styles.container}>
@@ -131,24 +144,29 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
         <View style={styles.header}>
-          <View style={styles.avatarWrap}>
-            <VideoView
-              player={player}
-              style={styles.avatarMedia}
-              contentFit="cover"
-              nativeControls={false}
-            />
+          <View style={[styles.avatarGlow, { backgroundColor: glowColor }]}>
+            <View style={styles.avatarWrap}>
+              <VideoView
+                player={player}
+                style={styles.avatarMedia}
+                contentFit="cover"
+                nativeControls={false}
+              />
+            </View>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.name}>{companion?.name ?? companionName ?? "Your soul friend"}</Text>
-            {mood && <Text style={styles.mood}>{mood}</Text>}
+            <Text style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}>
+              {companion?.name ?? companionName ?? "Your soul friend"}
+            </Text>
           </View>
         </View>
 
         <FlatList
+          ref={listRef}
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (
             <View
               style={[
@@ -210,6 +228,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  avatarGlow: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   avatarWrap: {
     width: 72,
     height: 72,
@@ -227,11 +252,6 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  mood: {
-    fontSize: 12,
-    color: colors.accent,
   },
   messages: {
     paddingHorizontal: spacing.lg,
