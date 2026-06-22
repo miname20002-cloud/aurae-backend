@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
 import { chat as sendChat } from "@/lib/api";
@@ -25,7 +26,7 @@ type Message = {
 };
 
 export default function ChatScreen() {
-  const { userId, companion: companionName } = useLocalSearchParams<{
+  const { companion: companionName } = useLocalSearchParams<{
     userId: string;
     companion: string;
   }>();
@@ -37,7 +38,19 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [mood, setMood] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(null);
   const nextId = useRef(0);
+
+  const player = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
+
+  useEffect(() => {
+    if (!currentAssetPath) return;
+    const url = assetUrl(currentAssetPath);
+    player.replace(url);
+    player.play();
+  }, [currentAssetPath]);
 
   function addMessage(role: "user" | "assistant", text: string) {
     nextId.current += 1;
@@ -57,6 +70,7 @@ export default function ChatScreen() {
       const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
       setMood(result.mood ?? null);
+      setCurrentAssetPath(result.asset_path);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -72,10 +86,24 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
+        <View style={styles.stage}>
+          {currentAssetPath ? (
+            <VideoView
+              player={player}
+              style={styles.stageMedia}
+              contentFit="cover"
+              nativeControls={false}
+            />
+          ) : companion ? (
+            <Image
+              source={{ uri: assetUrl(companion.facePath) }}
+              style={styles.stageMedia}
+              resizeMode="cover"
+            />
+          ) : null}
+        </View>
+
         <View style={styles.header}>
-          {companion && (
-            <Image source={{ uri: assetUrl(companion.facePath) }} style={styles.avatar} />
-          )}
           <View style={styles.headerText}>
             <Text style={styles.name}>{companion?.name ?? companionName ?? "Your soul friend"}</Text>
             {mood && <Text style={styles.mood}>{mood}</Text>}
@@ -137,6 +165,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  stage: {
+    width: "100%",
+    height: 220,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  stageMedia: {
+    width: "100%",
+    height: "100%",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -146,11 +184,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
   },
   headerText: {
     flex: 1,
