@@ -15,6 +15,10 @@
       "package": "com.aurae.app",
       "backgroundColor": "#0B0B12"
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-video"
+    ]
   }
 }

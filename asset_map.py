@@ -112,3 +112,13 @@ def resolve_asset(character_id: str, emotion_tag: str, last_filename: str | None
 def avatar_image_path(character_id: str) -> str:
     manifest = CHARACTER_ASSETS[character_id]
     return f"{ASSET_ROOT}/{manifest['dir']}/{manifest['face']}"
+
+
+def asset_path_for(character_id: str, filename: str | None) -> str | None:
+    """Reconstructs a full relative asset path from a stored filename
+    (e.g. the user's last_emotion_asset) without rolling a new emotion -
+    used for restoring chat history state, not for live chat turns."""
+    if not filename:
+        return None
+    manifest = CHARACTER_ASSETS[character_id]
+    return f"{ASSET_ROOT}/{manifest['dir']}/{filename}"

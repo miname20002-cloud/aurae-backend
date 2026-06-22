@@ -1,20 +1,29 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
   Pressable,
   FlatList,
-  Image,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
+import Svg, { Defs, Mask, Rect, Circle, RadialGradient, Stop } from "react-native-svg";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
-import { chat as sendChat } from "@/lib/api";
+import { chat as sendChat, getChatHistory } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
 import { companionByName } from "@/lib/companions";
 
@@ -24,21 +33,123 @@ type Message = {
   text: string;
 };
 
+function defaultNeutralPath(companionId: string): string {
+  const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
+  return `assets/${cap}_Assets/${cap}_neutral.mp4`;
+}
+
+const EMOTION_GLOW_RGB: Record<string, string> = {
+  neutral: "0, 242, 254",
+  think: "0, 242, 254",
+  smile: "255, 214, 107",
+  joy: "255, 184, 77",
+  blush: "255, 143, 171",
+  pout: "155, 140, 255",
+  wink: "255, 143, 203",
+  question: "140, 217, 255",
+};
+
 export default function ChatScreen() {
-  const { userId, companion: companionName } = useLocalSearchParams<{
+  const { companion: companionName } = useLocalSearchParams<{
     userId: string;
     companion: string;
   }>();
 
   const companion = companionByName(companionName ?? "") ?? null;
-  const userIdNum = Number(userId);
+  const initialPath = companion ? defaultNeutralPath(companion.id) : null;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [mood, setMood] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(initialPath);
+  const [currentEmotion, setCurrentEmotion] = useState<string>("neutral");
+  const [resumeKey, setResumeKey] = useState(0);
   const nextId = useRef(0);
+  const listRef = useRef<FlatList>(null);
+
+  const breath = useSharedValue(0.4);
+  useEffect(() => {
+    breath.value = withRepeat(
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, []);
+  const animatedGlowStyle = useAnimatedStyle(() => ({
+    opacity: breath.value,
+  }));
+
+  const player = useVideoPlayer(initialPath ? assetUrl(initialPath) : null, (p) => {
+    p.loop = true;
+    p.play();
+  });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const history = await getChatHistory();
+        if (history.messages.length > 0) {
+          setMessages(
+            history.messages.map((m) => {
+              nextId.current += 1;
+              return {
+                id: String(nextId.current),
+                role: m.role === "user" ? "user" : "assistant",
+                text: m.content,
+              };
+            })
+          );
+        }
+        if (history.asset_path) {
+          setCurrentAssetPath(history.asset_path);
+        }
+      } catch {
+        // 기록 불러오기 실패해도 빈 화면으로 시작
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!currentAssetPath) return;
+    const url = assetUrl(currentAssetPath);
+    player.replace(url);
+    player.loop = currentAssetPath === initialPath;
+    player.play();
+  }, [currentAssetPath]);
+
+  // 반응 영상이 끝나면(반복 안 되는 영상이라 끝까지 가면) 평상시 루프로 자연스럽게 복귀
+  useEffect(() => {
+    const subscription = player.addListener("playToEnd", () => {
+      if (initialPath && currentAssetPath && currentAssetPath !== initialPath) {
+        setCurrentAssetPath(initialPath);
+      }
+    });
+    return () => {
+      subscription?.remove();
+    };
+  }, [currentAssetPath]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        if (currentAssetPath) {
+          player.replace(assetUrl(currentAssetPath));
+          player.loop = currentAssetPath === initialPath;
+        }
+        player.play();
+        setResumeKey((k) => k + 1);
+      }
+    });
+    return () => subscription.remove();
+  }, [currentAssetPath]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [messages]);
 
   function addMessage(role: "user" | "assistant", text: string) {
     nextId.current += 1;
@@ -55,9 +166,10 @@ export default function ChatScreen() {
     setSending(true);
 
     try {
-      const result = await sendChat({ userId: userIdNum, message: text });
+      const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
-      setMood(result.mood ?? null);
+      setCurrentAssetPath(result.asset_path);
+      setCurrentEmotion(result.emotion_tag ?? "neutral");
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -65,6 +177,10 @@ export default function ChatScreen() {
       setSending(false);
     }
   }
+
+  const glowRgb = EMOTION_GLOW_RGB[currentEmotion] || EMOTION_GLOW_RGB["neutral"];
+  const hasGlow = Boolean(glowRgb);
+  const glowColor = `rgb(${glowRgb})`;
 
   return (
     <Screen style={styles.container}>
@@ -74,19 +190,60 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
         <View style={styles.header}>
-          {companion && (
-            <Image source={{ uri: assetUrl(companion.facePath) }} style={styles.avatar} />
-          )}
+          <View style={styles.avatarStack}>
+            <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
+              <Svg width={104} height={104} viewBox="0 0 104 104">
+                <Defs>
+                  <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
+                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
+                    <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
+                    <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
+                  </RadialGradient>
+                </Defs>
+                <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
+              </Svg>
+            </Animated.View>
+
+            <View style={styles.avatarWrap}>
+              <VideoView
+                key={resumeKey}
+                player={player}
+                style={styles.avatarMedia}
+                contentFit="cover"
+                nativeControls={false}
+              />
+              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
+                <Defs>
+                  <Mask id="avatarCircleMask">
+                    <Rect x="0" y="0" width="72" height="72" fill="white" />
+                    <Circle cx="36" cy="36" r="34" fill="black" />
+                  </Mask>
+                </Defs>
+                <Rect
+                  x="0"
+                  y="0"
+                  width="72"
+                  height="72"
+                  fill={colors.background}
+                  mask="url(#avatarCircleMask)"
+                />
+              </Svg>
+            </View>
+          </View>
+
           <View style={styles.headerText}>
-            <Text style={styles.name}>{companion?.name ?? companionName ?? "Your soul friend"}</Text>
-            {mood && <Text style={styles.mood}>{mood}</Text>}
+            <Text style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}>
+              {companion?.name ?? companionName ?? "Your soul friend"}
+            </Text>
           </View>
         </View>
 
         <FlatList
+          ref={listRef}
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (
             <View
               style={[
@@ -142,15 +299,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.lg,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  avatarStack: {
+    width: 104,
+    height: 104,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowSvgWrap: {
+    position: "absolute",
+    width: 104,
+    height: 104,
+  },
+  avatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+  },
+  avatarMedia: {
+    width: "100%",
+    height: "100%",
   },
   headerText: {
     flex: 1,
@@ -158,11 +334,6 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  mood: {
-    fontSize: 12,
-    color: colors.accent,
   },
   messages: {
     paddingHorizontal: spacing.lg,

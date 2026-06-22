@@ -7,19 +7,49 @@ import { useOnboarding } from "@/context/OnboardingContext";
 import { companionsFor, Companion } from "@/lib/companions";
 import { assetUrl } from "@/lib/api";
 
+function hexToRgba(hex: string, alpha: number): string {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function CompanionAvatar({ companion }: { companion: Companion }) {
+  const [attempt, setAttempt] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
 
+  function handleError() {
+    if (attempt < 2) {
+      setTimeout(() => setAttempt((a) => a + 1), 1500);
+    } else {
+      setImageFailed(true);
+    }
+  }
+
+  const glowOuter = hexToRgba(companion.accent, 0.12);
+  const glowMid = hexToRgba(companion.accent, 0.22);
+  const glowInner = hexToRgba(companion.accent, 0.35);
+  const borderColor = hexToRgba(companion.accent, 0.6);
+
   return (
-    <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
-      {!imageFailed && (
-        <Image
-          source={{ uri: assetUrl(companion.facePath) }}
-          style={styles.avatarImage}
-          onError={() => setImageFailed(true)}
-        />
-      )}
-      {imageFailed && <Text style={styles.avatarText}>{companion.initial}</Text>}
+    <View style={[styles.glowOuter, { backgroundColor: glowOuter }]}>
+      <View style={[styles.glowMid, { backgroundColor: glowMid }]}>
+        <View style={[styles.glowInner, { backgroundColor: glowInner }]}>
+          <View style={[styles.avatar, { backgroundColor: companion.accent, borderColor }]}>
+            {!imageFailed && (
+              <Image
+                key={attempt}
+                source={{ uri: assetUrl(companion.facePath) }}
+                style={styles.avatarImage}
+                onError={handleError}
+              />
+            )}
+            {imageFailed && <Text style={styles.avatarText}>{companion.initial}</Text>}
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
@@ -27,10 +57,6 @@ function CompanionAvatar({ companion }: { companion: Companion }) {
 export default function CompanionScreen() {
   const router = useRouter();
   const { genderPreference, setCompanionId } = useOnboarding();
-
-  // Falls back to "female" if someone lands here directly without picking
-  // a gender first - keeps this screen from crashing rather than enforcing
-  // strict navigation order.
   const options = companionsFor(genderPreference ?? "female");
 
   function choose(id: string) {
@@ -43,7 +69,6 @@ export default function CompanionScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Pick your soul match</Text>
         <Text style={styles.body}>Choose who feels right.</Text>
-
         <View style={styles.optionRow}>
           {options.map((companion) => (
             <Pressable
@@ -52,12 +77,13 @@ export default function CompanionScreen() {
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
               <CompanionAvatar companion={companion} />
-              <Text style={styles.optionText}>{companion.name}</Text>
+              <Text style={[styles.optionText, { color: companion.accent }]}>
+                {companion.name}
+              </Text>
             </Pressable>
           ))}
         </View>
       </View>
-
       <View style={styles.bottom}>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>← Back</Text>
@@ -106,10 +132,35 @@ const styles = StyleSheet.create({
   optionPressed: {
     borderColor: colors.accent,
   },
+  glowOuter: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowMid: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
+    borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -126,7 +177,6 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.textPrimary,
   },
   bottom: {
     paddingBottom: spacing.xl,
