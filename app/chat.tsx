@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   AppState,
+  StatusBar,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -26,6 +27,7 @@ import { colors, spacing, radius } from "@/theme/colors";
 import { chat as sendChat, getChatHistory } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
 import { companionByName } from "@/lib/companions";
+import { getSession } from "@/lib/session";
 
 type Message = {
   id: string;
@@ -46,6 +48,15 @@ function emotionFromPath(path: string | null): string {
   if (!path) return "neutral";
   const match = path.match(/_(\w+)\.mp4$/);
   return match ? match[1] : "neutral";
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 const EMOTION_GLOW_RGB: Record<string, string> = {
@@ -75,6 +86,7 @@ export default function ChatScreen() {
   const [activeIsA, setActiveIsA] = useState(true);
   const [reactionPath, setReactionPath] = useState<string | null>(null);
   const [resumeKey, setResumeKey] = useState(0);
+  const [userName, setUserName] = useState<string | null>(null);
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
 
@@ -90,7 +102,22 @@ export default function ChatScreen() {
     opacity: breath.value,
   }));
 
-  // 두 개의 플레이어 - 하나는 보여지는 중, 하나는 다음 클립을 미리 로딩해둠
+  // 안드로이드에서 영상 플레이어가 상태바를 숨겨버리는 경우가 있어서,
+  // 주기적으로 강제로 다시 보이게 함 (방어적 우회)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      StatusBar.setHidden(false, "none");
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const session = await getSession();
+      if (session) setUserName(session.name);
+    })();
+  }, []);
+
   const playerA = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
@@ -105,7 +132,6 @@ export default function ChatScreen() {
     return activeIsA ? playerB : playerA;
   }
 
-  // 최초 1회: A에 첫 표정 재생, B에 두 번째 표정 미리 로딩(정지 상태)
   useEffect(() => {
     if (!companion) return;
     playerA.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[0])));
@@ -131,7 +157,6 @@ export default function ChatScreen() {
           );
         }
         if (history.asset_path) {
-          // 최근 감정 영상으로 보여지는 쪽을 한 번 덮어씀
           getActive().replace(assetUrl(history.asset_path));
           getActive().play();
           setReactionPath(history.asset_path);
@@ -143,7 +168,6 @@ export default function ChatScreen() {
     })();
   }, []);
 
-  // 평상시 로테이션: reactionPath가 없을 때만 돌아감
   useEffect(() => {
     if (reactionPath || !companion) return;
     const timer = setTimeout(() => {
@@ -151,11 +175,10 @@ export default function ChatScreen() {
       const bufferedIdx = (idleIdx + 2) % IDLE_EMOTIONS.length;
 
       const newActiveIsA = !activeIsA;
-      getHidden().play(); // 이미 다음 클립이 로딩되어 있어서 바로 재생됨 (깜빡임 없음)
+      getHidden().play();
       setActiveIsA(newActiveIsA);
       setIdleIdx(nextIdx);
 
-      // 방금 화면 뒤로 숨겨진 쪽에 그 다음 클립을 미리 로딩해둠
       const stale = activeIsA ? playerA : playerB;
       stale.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[bufferedIdx])));
       stale.pause();
@@ -197,7 +220,6 @@ export default function ChatScreen() {
     try {
       const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
-      // 반응 영상은 지금 보이는 플레이어에 바로 끼워넣음 (가끔 생기는 자연스러운 끼어들기)
       getActive().replace(assetUrl(result.asset_path));
       getActive().play();
       setReactionPath(result.asset_path);
@@ -276,6 +298,8 @@ export default function ChatScreen() {
               {companion?.name ?? companionName ?? "Your soul friend"}
             </Text>
           </View>
+
+          {userName && <Text style={styles.userName}>{userName}</Text>}
         </View>
 
         <FlatList
@@ -309,16 +333,19 @@ export default function ChatScreen() {
             onChangeText={setInput}
             placeholder="say something"
             placeholderTextColor={colors.textTertiary}
-            style={styles.input}
+            style={[
+              styles.input,
+              companion?.accent && { borderColor: hexToRgba(companion.accent, 0.5) },
+            ]}
             editable={!sending}
             onSubmitEditing={handleSend}
             returnKeyType="send"
           />
           {sending ? (
-            <ActivityIndicator color={colors.accent} style={styles.sendButton} />
+            <ActivityIndicator color={companion?.accent ?? colors.accent} style={styles.sendButton} />
           ) : (
             <Pressable onPress={handleSend} style={styles.sendButton}>
-              <Text style={styles.sendText}>Send</Text>
+              <Text style={[styles.sendText, { color: companion?.accent ?? colors.accent }]}>Send</Text>
             </Pressable>
           )}
         </View>
@@ -374,6 +401,10 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: "700",
+  },
+  userName: {
+    fontSize: 13,
+    color: colors.textTertiary,
   },
   messages: {
     paddingHorizontal: spacing.lg,
@@ -443,7 +474,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   sendText: {
-    color: colors.accent,
     fontWeight: "700",
     fontSize: 15,
   },
