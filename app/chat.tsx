@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import Svg, { Defs, Mask, Rect, Circle } from "react-native-svg";
+import Svg, { Defs, Mask, Rect, Circle, RadialGradient, Stop } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -67,8 +67,7 @@ export default function ChatScreen() {
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
 
-  // 글로우가 천천히 밝아졌다 흐려지는 "숨쉬는" 애니메이션
-  const breath = useSharedValue(0.55);
+  const breath = useSharedValue(0.5);
   useEffect(() => {
     breath.value = withRepeat(
       withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
@@ -132,6 +131,15 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [currentAssetPath]);
 
+  // 메시지 목록이 바뀔 때마다 약간의 지연 후 한 번 더 확실하게 맨 아래로 내림
+  // (긴 메시지는 줄바꿈 높이 계산이 onContentSizeChange보다 늦게 끝나는 경우가 있음)
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [messages]);
+
   function addMessage(role: "user" | "assistant", text: string) {
     nextId.current += 1;
     setMessages((prev) => [...prev, { id: String(nextId.current), role, text }]);
@@ -161,6 +169,7 @@ export default function ChatScreen() {
 
   const glowRgb = EMOTION_GLOW_RGB[currentEmotion];
   const hasGlow = Boolean(glowRgb);
+  const glowColor = hasGlow ? `rgb(${glowRgb})` : "rgb(0,0,0)";
 
   return (
     <Screen style={styles.container}>
@@ -171,27 +180,17 @@ export default function ChatScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatarStack}>
-            <Animated.View style={[styles.glowGroup, animatedGlowStyle]} pointerEvents="none">
-              <View
-                style={[
-                  styles.glowOuter,
-                  hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.10)` },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.glowMid,
-                    hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.18)` },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.glowInner,
-                      hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.28)` },
-                    ]}
-                  />
-                </View>
-              </View>
+            <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
+              <Svg width={104} height={104} viewBox="0 0 104 104">
+                <Defs>
+                  <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
+                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.55 : 0} />
+                    <Stop offset="55%" stopColor={glowColor} stopOpacity={hasGlow ? 0.22 : 0} />
+                    <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
+                  </RadialGradient>
+                </Defs>
+                <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
+              </Svg>
             </Animated.View>
 
             <View
@@ -306,34 +305,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  glowGroup: {
+  glowSvgWrap: {
     position: "absolute",
     width: 104,
     height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glowOuter: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glowMid: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glowInner: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    overflow: "hidden",
   },
   avatarWrap: {
     width: 72,
