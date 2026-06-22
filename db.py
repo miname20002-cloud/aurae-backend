@@ -27,6 +27,9 @@ class User(Base):
     tier = Column(String, default="free", nullable=False)  # "free" | "premium"
     daily_message_count = Column(Integer, default=0, nullable=False)
     daily_count_date = Column(String, nullable=True)  # "YYYY-MM-DD", resets count when it changes
+    refresh_token_hash = Column(String, nullable=True)
+    device_id = Column(String, nullable=True)
+    refresh_token_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     messages = relationship("ChatMessage", back_populates="user")
