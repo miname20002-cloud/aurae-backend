@@ -102,8 +102,6 @@ export default function ChatScreen() {
     opacity: breath.value,
   }));
 
-  // 안드로이드에서 영상 플레이어가 상태바를 숨겨버리는 경우가 있어서,
-  // 주기적으로 강제로 다시 보이게 함 (방어적 우회)
   useEffect(() => {
     const interval = setInterval(() => {
       StatusBar.setHidden(false, "none");
@@ -312,7 +310,12 @@ export default function ChatScreen() {
             <View
               style={[
                 styles.bubble,
-                item.role === "user" ? styles.bubbleUser : styles.bubbleAssistant,
+                item.role === "user"
+                  ? [
+                      styles.bubbleUser,
+                      companion?.accent && { backgroundColor: hexToRgba(companion.accent, 0.22) },
+                    ]
+                  : styles.bubbleAssistant,
               ]}
             >
               <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
@@ -403,8 +406,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   userName: {
-    fontSize: 13,
-    color: colors.textTertiary,
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textSecondary,
   },
   messages: {
     paddingHorizontal: spacing.lg,
@@ -433,7 +437,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   bubbleTextUser: {
-    color: colors.background,
+    color: colors.textPrimary,
     fontSize: 15,
     lineHeight: 21,
   },
