@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   FlatList,
-  Image,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -25,6 +24,11 @@ type Message = {
   text: string;
 };
 
+function defaultNeutralPath(companionId: string): string {
+  const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
+  return `assets/${cap}_Assets/${cap}_neutral.mp4`;
+}
+
 export default function ChatScreen() {
   const { companion: companionName } = useLocalSearchParams<{
     userId: string;
@@ -32,23 +36,26 @@ export default function ChatScreen() {
   }>();
 
   const companion = companionByName(companionName ?? "") ?? null;
+  const initialPath = companion ? defaultNeutralPath(companion.id) : null;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mood, setMood] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(null);
+  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(initialPath);
   const nextId = useRef(0);
 
-  const player = useVideoPlayer(null, (p) => {
-    p.loop = false;
+  const player = useVideoPlayer(initialPath ? assetUrl(initialPath) : null, (p) => {
+    p.loop = true;
+    p.play();
   });
 
   useEffect(() => {
     if (!currentAssetPath) return;
     const url = assetUrl(currentAssetPath);
     player.replace(url);
+    player.loop = currentAssetPath === initialPath;
     player.play();
   }, [currentAssetPath]);
 
@@ -86,24 +93,15 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
-        <View style={styles.stage}>
-          {currentAssetPath ? (
+        <View style={styles.header}>
+          <View style={styles.avatarWrap}>
             <VideoView
               player={player}
-              style={styles.stageMedia}
+              style={styles.avatarMedia}
               contentFit="cover"
               nativeControls={false}
             />
-          ) : companion ? (
-            <Image
-              source={{ uri: assetUrl(companion.facePath) }}
-              style={styles.stageMedia}
-              resizeMode="cover"
-            />
-          ) : null}
-        </View>
-
-        <View style={styles.header}>
+          </View>
           <View style={styles.headerText}>
             <Text style={styles.name}>{companion?.name ?? companionName ?? "Your soul friend"}</Text>
             {mood && <Text style={styles.mood}>{mood}</Text>}
@@ -165,16 +163,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  stage: {
-    width: "100%",
-    height: 220,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
-  },
-  stageMedia: {
-    width: "100%",
-    height: "100%",
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -184,6 +172,17 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  avatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+  },
+  avatarMedia: {
+    width: "100%",
+    height: "100%",
   },
   headerText: {
     flex: 1,
