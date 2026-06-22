@@ -14,6 +14,13 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Svg, { Defs, Mask, Rect, Circle } from "react-native-svg";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
 import { chat as sendChat, getChatHistory } from "@/lib/api";
@@ -59,6 +66,19 @@ export default function ChatScreen() {
   const [resumeKey, setResumeKey] = useState(0);
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
+
+  // 글로우가 천천히 밝아졌다 흐려지는 "숨쉬는" 애니메이션
+  const breath = useSharedValue(0.55);
+  useEffect(() => {
+    breath.value = withRepeat(
+      withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, []);
+  const animatedGlowStyle = useAnimatedStyle(() => ({
+    opacity: breath.value,
+  }));
 
   const player = useVideoPlayer(initialPath ? assetUrl(initialPath) : null, (p) => {
     p.loop = true;
@@ -150,57 +170,62 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
         <View style={styles.header}>
-          <View
-            style={[
-              styles.glowOuter,
-              hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.12)` },
-            ]}
-          >
-            <View
-              style={[
-                styles.glowMid,
-                hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.22)` },
-              ]}
-            >
+          <View style={styles.avatarStack}>
+            <Animated.View style={[styles.glowGroup, animatedGlowStyle]} pointerEvents="none">
               <View
                 style={[
-                  styles.glowInner,
-                  hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.35)` },
+                  styles.glowOuter,
+                  hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.10)` },
                 ]}
               >
                 <View
                   style={[
-                    styles.avatarWrap,
-                    { borderColor: hasGlow ? `rgba(${glowRgb}, 0.6)` : "transparent" },
+                    styles.glowMid,
+                    hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.18)` },
                   ]}
                 >
-                  <VideoView
-                    key={resumeKey}
-                    player={player}
-                    style={styles.avatarMedia}
-                    contentFit="cover"
-                    nativeControls={false}
+                  <View
+                    style={[
+                      styles.glowInner,
+                      hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.28)` },
+                    ]}
                   />
-                  <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
-                    <Defs>
-                      <Mask id="avatarCircleMask">
-                        <Rect x="0" y="0" width="72" height="72" fill="white" />
-                        <Circle cx="36" cy="36" r="34" fill="black" />
-                      </Mask>
-                    </Defs>
-                    <Rect
-                      x="0"
-                      y="0"
-                      width="72"
-                      height="72"
-                      fill={colors.background}
-                      mask="url(#avatarCircleMask)"
-                    />
-                  </Svg>
                 </View>
               </View>
+            </Animated.View>
+
+            <View
+              style={[
+                styles.avatarWrap,
+                { borderColor: hasGlow ? `rgba(${glowRgb}, 0.55)` : "transparent" },
+              ]}
+            >
+              <VideoView
+                key={resumeKey}
+                player={player}
+                style={styles.avatarMedia}
+                contentFit="cover"
+                nativeControls={false}
+              />
+              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
+                <Defs>
+                  <Mask id="avatarCircleMask">
+                    <Rect x="0" y="0" width="72" height="72" fill="white" />
+                    <Circle cx="36" cy="36" r="34" fill="black" />
+                  </Mask>
+                </Defs>
+                <Rect
+                  x="0"
+                  y="0"
+                  width="72"
+                  height="72"
+                  fill={colors.background}
+                  mask="url(#avatarCircleMask)"
+                />
+              </Svg>
             </View>
           </View>
+
           <View style={styles.headerText}>
             <Text style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}>
               {companion?.name ?? companionName ?? "Your soul friend"}
@@ -275,6 +300,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  avatarStack: {
+    width: 104,
+    height: 104,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowGroup: {
+    position: "absolute",
+    width: 104,
+    height: 104,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   glowOuter: {
     width: 104,
     height: 104,
@@ -284,20 +322,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   glowMid: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
   glowInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
   },
   avatarWrap: {
     width: 72,
