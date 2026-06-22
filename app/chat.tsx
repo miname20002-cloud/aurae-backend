@@ -263,6 +263,8 @@ const styles = StyleSheet.create({
   avatarMedia: {
     width: "100%",
     height: "100%",
+    borderRadius: 36,
+    overflow: "hidden",
   },
   headerText: {
     flex: 1,
