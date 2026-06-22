@@ -118,6 +118,18 @@ export default function ChatScreen() {
     player.play();
   }, [currentAssetPath]);
 
+  // 반응 영상이 끝나면(반복 안 되는 영상이라 끝까지 가면) 평상시 루프로 자연스럽게 복귀
+  useEffect(() => {
+    const subscription = player.addListener("playToEnd", () => {
+      if (initialPath && currentAssetPath && currentAssetPath !== initialPath) {
+        setCurrentAssetPath(initialPath);
+      }
+    });
+    return () => {
+      subscription?.remove();
+    };
+  }, [currentAssetPath]);
+
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
