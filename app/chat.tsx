@@ -33,9 +33,9 @@ type Message = {
   text: string;
 };
 
-// question.mp4는 음성이 들어있어서 평상시 로테이션에서는 제외 - 첫 채팅 응답에서만
-// (백엔드에서 그 이후엔 재사용 안 되게 막아줌) 등장할 수 있음
 const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
+const IDLE_SWITCH_MS = 7500;
+const REACTION_HOLD_MS = 7500;
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -71,10 +71,9 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [idleIndex, setIdleIndex] = useState(0);
-  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(
-    companion ? emotionClipPath(companion.id, IDLE_EMOTIONS[0]) : null
-  );
+  const [idleIdx, setIdleIdx] = useState(0);
+  const [activeIsA, setActiveIsA] = useState(true);
+  const [reactionPath, setReactionPath] = useState<string | null>(null);
   const [resumeKey, setResumeKey] = useState(0);
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
@@ -91,10 +90,29 @@ export default function ChatScreen() {
     opacity: breath.value,
   }));
 
-  const player = useVideoPlayer(currentAssetPath ? assetUrl(currentAssetPath) : null, (p) => {
+  // 두 개의 플레이어 - 하나는 보여지는 중, 하나는 다음 클립을 미리 로딩해둠
+  const playerA = useVideoPlayer(null, (p) => {
     p.loop = false;
-    p.play();
   });
+  const playerB = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
+
+  function getActive() {
+    return activeIsA ? playerA : playerB;
+  }
+  function getHidden() {
+    return activeIsA ? playerB : playerA;
+  }
+
+  // 최초 1회: A에 첫 표정 재생, B에 두 번째 표정 미리 로딩(정지 상태)
+  useEffect(() => {
+    if (!companion) return;
+    playerA.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[0])));
+    playerA.play();
+    playerB.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[1 % IDLE_EMOTIONS.length])));
+    playerB.pause();
+  }, [companion]);
 
   useEffect(() => {
     (async () => {
@@ -113,7 +131,11 @@ export default function ChatScreen() {
           );
         }
         if (history.asset_path) {
-          setCurrentAssetPath(history.asset_path);
+          // 최근 감정 영상으로 보여지는 쪽을 한 번 덮어씀
+          getActive().replace(assetUrl(history.asset_path));
+          getActive().play();
+          setReactionPath(history.asset_path);
+          setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
         }
       } catch {
         // 기록 불러오기 실패해도 빈 화면으로 시작
@@ -121,38 +143,35 @@ export default function ChatScreen() {
     })();
   }, []);
 
+  // 평상시 로테이션: reactionPath가 없을 때만 돌아감
   useEffect(() => {
-    if (!currentAssetPath) return;
-    player.replace(assetUrl(currentAssetPath));
-    player.loop = false;
-    player.play();
-  }, [currentAssetPath]);
-
-  // 타이머 기반으로 다음 표정 전환 - playToEnd 네이티브 이벤트보다 안정적
-  // (영상 ~5초 재생 + 마지막 프레임에서 잠깐 정지 후 다음 표정으로)
-  useEffect(() => {
-    if (!currentAssetPath || !companion) return;
+    if (reactionPath || !companion) return;
     const timer = setTimeout(() => {
-      const nextIdx = (idleIndex + 1) % IDLE_EMOTIONS.length;
-      setIdleIndex(nextIdx);
-      setCurrentAssetPath(emotionClipPath(companion.id, IDLE_EMOTIONS[nextIdx]));
-    }, 7500);
+      const nextIdx = (idleIdx + 1) % IDLE_EMOTIONS.length;
+      const bufferedIdx = (idleIdx + 2) % IDLE_EMOTIONS.length;
+
+      const newActiveIsA = !activeIsA;
+      getHidden().play(); // 이미 다음 클립이 로딩되어 있어서 바로 재생됨 (깜빡임 없음)
+      setActiveIsA(newActiveIsA);
+      setIdleIdx(nextIdx);
+
+      // 방금 화면 뒤로 숨겨진 쪽에 그 다음 클립을 미리 로딩해둠
+      const stale = activeIsA ? playerA : playerB;
+      stale.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[bufferedIdx])));
+      stale.pause();
+    }, IDLE_SWITCH_MS);
     return () => clearTimeout(timer);
-  }, [currentAssetPath]);
+  }, [idleIdx, activeIsA, reactionPath, companion]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        if (currentAssetPath) {
-          player.replace(assetUrl(currentAssetPath));
-          player.loop = false;
-        }
-        player.play();
+        getActive().play();
         setResumeKey((k) => k + 1);
       }
     });
     return () => subscription.remove();
-  }, [currentAssetPath]);
+  });
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -178,7 +197,11 @@ export default function ChatScreen() {
     try {
       const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
-      setCurrentAssetPath(result.asset_path);
+      // 반응 영상은 지금 보이는 플레이어에 바로 끼워넣음 (가끔 생기는 자연스러운 끼어들기)
+      getActive().replace(assetUrl(result.asset_path));
+      getActive().play();
+      setReactionPath(result.asset_path);
+      setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -187,7 +210,7 @@ export default function ChatScreen() {
     }
   }
 
-  const currentEmotion = emotionFromPath(currentAssetPath);
+  const currentEmotion = reactionPath ? emotionFromPath(reactionPath) : IDLE_EMOTIONS[idleIdx];
   const glowRgb = EMOTION_GLOW_RGB[currentEmotion] || EMOTION_GLOW_RGB["neutral"];
   const hasGlow = Boolean(glowRgb);
   const glowColor = `rgb(${glowRgb})`;
@@ -216,9 +239,16 @@ export default function ChatScreen() {
 
             <View style={styles.avatarWrap}>
               <VideoView
-                key={resumeKey}
-                player={player}
-                style={styles.avatarMedia}
+                key={`a-${resumeKey}`}
+                player={playerA}
+                style={[styles.avatarMedia, { opacity: activeIsA ? 1 : 0 }]}
+                contentFit="cover"
+                nativeControls={false}
+              />
+              <VideoView
+                key={`b-${resumeKey}`}
+                player={playerB}
+                style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
                 contentFit="cover"
                 nativeControls={false}
               />
