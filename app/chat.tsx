@@ -30,7 +30,6 @@ function defaultNeutralPath(companionId: string): string {
   return `assets/${cap}_Assets/${cap}_neutral.mp4`;
 }
 
-// 캐릭터 감정에 따라 프레임 바깥에 보일 연한 색 링
 const EMOTION_GLOW: Record<string, string> = {
   neutral: "transparent",
   smile: "rgba(255, 214, 107, 0.35)",
@@ -57,6 +56,7 @@ export default function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(initialPath);
   const [currentEmotion, setCurrentEmotion] = useState<string>("neutral");
+  const [resumeKey, setResumeKey] = useState(0);
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
 
@@ -98,14 +98,21 @@ export default function ChatScreen() {
     player.play();
   }, [currentAssetPath]);
 
+  // 안드로이드는 백그라운드 갔다오면 영상 표면(Surface)이 사라져서,
+  // 단순 play()로는 복구가 안 됨 - 소스 다시 불러오기 + VideoView 강제 재생성으로 복구
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
+        if (currentAssetPath) {
+          player.replace(assetUrl(currentAssetPath));
+          player.loop = currentAssetPath === initialPath;
+        }
         player.play();
+        setResumeKey((k) => k + 1);
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [currentAssetPath]);
 
   function addMessage(role: "user" | "assistant", text: string) {
     nextId.current += 1;
@@ -147,6 +154,7 @@ export default function ChatScreen() {
           <View style={[styles.avatarGlow, { backgroundColor: glowColor }]}>
             <View style={styles.avatarWrap}>
               <VideoView
+                key={resumeKey}
                 player={player}
                 style={styles.avatarMedia}
                 contentFit="cover"
@@ -232,6 +240,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
