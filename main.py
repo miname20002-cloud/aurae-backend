@@ -169,6 +169,31 @@ def refresh_token_endpoint(req: RefreshRequest):
     return {"access_token": new_access_token, "refresh_token": new_refresh_token}
 
 
+@app.get("/chat/history")
+def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
+    """
+    Returns recent chat turns plus the user's last emotion asset, so the
+    frontend can rehydrate the chat screen (messages + avatar video state)
+    after a remount/app restart instead of always starting blank.
+    """
+    session = get_session(engine)
+    user = session.get(User, current_user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    recent = (
+        session.query(ChatMessage)
+        .filter(ChatMessage.user_id == user.id)
+        .order_by(ChatMessage.id.desc())
+        .limit(40)
+        .all()
+    )
+    messages = [{"role": m.role, "content": m.content} for m in reversed(recent)]
+    asset_path = asset_map.asset_path_for(user.companion_id, user.last_emotion_asset)
+
+    return {"messages": messages, "asset_path": asset_path}
+
+
 def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: dict, search_snippet: str | None) -> str:
     patterns = json.loads(profile.emotional_patterns or "[]")
     topics = json.loads(profile.topics_of_interest or "[]")
