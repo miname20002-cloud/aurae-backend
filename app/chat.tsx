@@ -32,13 +32,13 @@ function defaultNeutralPath(companionId: string): string {
 
 const EMOTION_GLOW: Record<string, string> = {
   neutral: "transparent",
-  smile: "rgba(255, 214, 107, 0.35)",
-  joy: "rgba(255, 184, 77, 0.4)",
-  blush: "rgba(255, 143, 171, 0.4)",
-  pout: "rgba(155, 140, 255, 0.35)",
-  think: "rgba(110, 201, 255, 0.35)",
-  wink: "rgba(255, 143, 203, 0.35)",
-  question: "rgba(140, 217, 255, 0.35)",
+  smile: "rgba(255, 214, 107, 0.45)",
+  joy: "rgba(255, 184, 77, 0.5)",
+  blush: "rgba(255, 143, 171, 0.5)",
+  pout: "rgba(155, 140, 255, 0.45)",
+  think: "rgba(110, 201, 255, 0.45)",
+  wink: "rgba(255, 143, 203, 0.45)",
+  question: "rgba(140, 217, 255, 0.45)",
 };
 
 export default function ChatScreen() {
@@ -151,7 +151,17 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
         <View style={styles.header}>
-          <View style={[styles.avatarGlow, { backgroundColor: glowColor }]}>
+          <View
+            style={[
+              styles.avatarShadowHost,
+              {
+                boxShadow:
+                  glowColor !== "transparent"
+                    ? `0 0 20px 6px ${glowColor}`
+                    : "none",
+              },
+            ]}
+          >
             <View style={styles.avatarWrap}>
               <VideoView
                 key={resumeKey}
@@ -236,11 +246,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  avatarGlow: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    overflow: "hidden",
+  avatarShadowHost: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
   },
