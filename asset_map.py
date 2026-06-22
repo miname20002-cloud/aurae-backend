@@ -121,8 +121,4 @@ def asset_path_for(character_id: str, filename: str | None) -> str | None:
     if not filename:
         return None
     manifest = CHARACTER_ASSETS[character_id]
-<<<<<<< HEAD
     return f"{ASSET_ROOT}/{manifest['dir']}/{filename}"
-=======
-    return f"{ASSET_ROOT}/{manifest['dir']}/{filename}"
->>>>>>> 369efc0e58c42fb152533ce30118200e1a87047e
