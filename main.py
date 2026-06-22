@@ -2,13 +2,14 @@ import json
 import os
 import re
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import asset_map
+import auth
 import claude_client
 import mood as mood_module
 import realtime_search
@@ -60,20 +61,25 @@ class SignupRequest(BaseModel):
     gender_preference: str  # "female" | "male"
     companion_id: str       # one of PERSONAS keys
     initial_tone: str = "unknown"  # "gentle" | "witty" | "unknown" - seeds comfort_style
+    device_id: str
 
 
 class ChatRequest(BaseModel):
-    user_id: int
     message: str
 
 
 class SetTierRequest(BaseModel):
-    user_id: int
     tier: str  # "free" | "premium"
 
 
+class RefreshRequest(BaseModel):
+    user_id: int
+    refresh_token: str
+    device_id: str
+
+
 @app.post("/debug/set-tier")
-def debug_set_tier(req: SetTierRequest):
+def debug_set_tier(req: SetTierRequest, current_user_id: int = Depends(auth.get_current_user_id)):
     """
     TEMPORARY: manually flips a user's tier for testing the free/premium
     split before real App Store / Play Store purchase verification is wired
@@ -84,7 +90,7 @@ def debug_set_tier(req: SetTierRequest):
     if req.tier not in ("free", "premium"):
         raise HTTPException(status_code=400, detail="tier must be 'free' or 'premium'.")
     session = get_session(engine)
-    user = session.get(User, req.user_id)
+    user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     user.tier = req.tier
@@ -121,8 +127,46 @@ def signup(req: SignupRequest):
     session.add(user)
     session.commit()
     session.add(UserInsightProfile(user_id=user.id, comfort_style=req.initial_tone))
+
+    refresh_token = auth.generate_refresh_token()
+    user.refresh_token_hash = auth.hash_refresh_token(refresh_token)
+    user.device_id = req.device_id
+    user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=auth.REFRESH_TOKEN_TTL_DAYS)
     session.commit()
-    return {"user_id": user.id, "companion": PERSONAS[req.companion_id]["name"]}
+
+    access_token = auth.create_access_token(user.id)
+    return {
+        "user_id": user.id,
+        "companion": PERSONAS[req.companion_id]["name"],
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
+
+
+@app.post("/auth/refresh")
+def refresh_token_endpoint(req: RefreshRequest):
+    session = get_session(engine)
+    user = session.get(User, req.user_id)
+    if not user or not user.refresh_token_hash:
+        raise HTTPException(status_code=401, detail="Invalid refresh request.")
+
+    if user.device_id != req.device_id:
+        raise HTTPException(status_code=401, detail="Device mismatch. Please log in again.")
+
+    if user.refresh_token_expires_at and user.refresh_token_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Refresh token expired. Please log in again.")
+
+    if auth.hash_refresh_token(req.refresh_token) != user.refresh_token_hash:
+        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+
+    # Rotate: issue a brand new refresh token, invalidate the old one immediately.
+    new_refresh_token = auth.generate_refresh_token()
+    user.refresh_token_hash = auth.hash_refresh_token(new_refresh_token)
+    user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=auth.REFRESH_TOKEN_TTL_DAYS)
+    session.commit()
+
+    new_access_token = auth.create_access_token(user.id)
+    return {"access_token": new_access_token, "refresh_token": new_refresh_token}
 
 
 def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: dict, search_snippet: str | None) -> str:
@@ -159,9 +203,9 @@ def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: 
 
 
 @app.post("/chat")
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_id)):
     session = get_session(engine)
-    user = session.get(User, req.user_id)
+    user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     persona = PERSONAS[user.companion_id]
