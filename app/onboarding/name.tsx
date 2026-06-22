@@ -50,9 +50,12 @@ export default function NameScreen() {
           onSubmitEditing={handleNext}
           maxLength={20}
         />
-        <Text style={styles.notice}>
-          ⚠️ Your name can't be changed after signup. Choose carefully.
-        </Text>
+       <View style={styles.noticeRow}>
+          <Text style={styles.noticeIcon}>⚠️</Text>
+          <Text style={styles.noticeText}>
+            Your name can't be changed after signup. Choose carefully.
+          </Text>
+        </View>
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
       <View style={styles.bottom}>
@@ -109,10 +112,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     backgroundColor: colors.surface,
   },
-  notice: {
+  noticeRow: {
+    flexDirection: "row",
     marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  noticeIcon: {
+    fontSize: 12,
+  },
+  noticeText: {
+    flex: 1,
     fontSize: 12,
     color: colors.textTertiary,
+    lineHeight: 17,
   },
   error: {
     marginTop: spacing.sm,
