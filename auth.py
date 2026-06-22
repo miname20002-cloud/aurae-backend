@@ -13,12 +13,15 @@ import hashlib
 from datetime import datetime, timedelta
 
 import jwt
-from fastapi import HTTPException, Header
+from fastapi import HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL_MINUTES = 120
 REFRESH_TOKEN_TTL_DAYS = 30
+
+security_scheme = HTTPBearer()
 
 
 def create_access_token(user_id: int) -> str:
@@ -51,9 +54,6 @@ def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def get_current_user_id(authorization: str = Header(...)) -> int:
+def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)) -> int:
     """FastAPI dependency. Expects header: Authorization: Bearer <access_token>"""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header.")
-    token = authorization[len("Bearer "):]
-    return decode_access_token(token)
+    return decode_access_token(credentials.credentials)
