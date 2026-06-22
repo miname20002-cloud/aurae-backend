@@ -33,9 +33,19 @@ type Message = {
   text: string;
 };
 
-function defaultNeutralPath(companionId: string): string {
+// question.mp4는 유일하게 음성이 들어있어서, 평상시 대기 로테이션에선 빼고
+// 실제로 AI가 "question" 감정으로 반응할 때만 쓰이게 둠
+const IDLE_EMOTIONS = ["neutral", "smile", "joy", "think", "wink"];
+
+function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
-  return `assets/${cap}_Assets/${cap}_neutral.mp4`;
+  return `assets/${cap}_Assets/${cap}_${emotion}.mp4`;
+}
+
+function emotionFromPath(path: string | null): string {
+  if (!path) return "neutral";
+  const match = path.match(/_(\w+)\.mp4$/);
+  return match ? match[1] : "neutral";
 }
 
 const EMOTION_GLOW_RGB: Record<string, string> = {
@@ -56,14 +66,15 @@ export default function ChatScreen() {
   }>();
 
   const companion = companionByName(companionName ?? "") ?? null;
-  const initialPath = companion ? defaultNeutralPath(companion.id) : null;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(initialPath);
-  const [currentEmotion, setCurrentEmotion] = useState<string>("neutral");
+  const [idleIndex, setIdleIndex] = useState(0);
+  const [currentAssetPath, setCurrentAssetPath] = useState<string | null>(
+    companion ? emotionClipPath(companion.id, IDLE_EMOTIONS[0]) : null
+  );
   const [resumeKey, setResumeKey] = useState(0);
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
@@ -80,8 +91,8 @@ export default function ChatScreen() {
     opacity: breath.value,
   }));
 
-  const player = useVideoPlayer(initialPath ? assetUrl(initialPath) : null, (p) => {
-    p.loop = true;
+  const player = useVideoPlayer(currentAssetPath ? assetUrl(currentAssetPath) : null, (p) => {
+    p.loop = false;
     p.play();
   });
 
@@ -112,30 +123,31 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!currentAssetPath) return;
-    const url = assetUrl(currentAssetPath);
-    player.replace(url);
-    player.loop = currentAssetPath === initialPath;
+    player.replace(assetUrl(currentAssetPath));
+    player.loop = false; // 항상 한 번만 재생, 다음 클립으로 넘어가는 건 직접 제어
     player.play();
   }, [currentAssetPath]);
 
-  // 반응 영상이 끝나면(반복 안 되는 영상이라 끝까지 가면) 평상시 루프로 자연스럽게 복귀
+  // 영상 하나가 끝나면(반응이든 평상시든) 평상시 로테이션의 다음 표정으로 자연스럽게 이어감
   useEffect(() => {
     const subscription = player.addListener("playToEnd", () => {
-      if (initialPath && currentAssetPath && currentAssetPath !== initialPath) {
-        setCurrentAssetPath(initialPath);
+      const nextIdx = (idleIndex + 1) % IDLE_EMOTIONS.length;
+      setIdleIndex(nextIdx);
+      if (companion) {
+        setCurrentAssetPath(emotionClipPath(companion.id, IDLE_EMOTIONS[nextIdx]));
       }
     });
     return () => {
       subscription?.remove();
     };
-  }, [currentAssetPath]);
+  }, [idleIndex, companion]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         if (currentAssetPath) {
           player.replace(assetUrl(currentAssetPath));
-          player.loop = currentAssetPath === initialPath;
+          player.loop = false;
         }
         player.play();
         setResumeKey((k) => k + 1);
@@ -169,7 +181,6 @@ export default function ChatScreen() {
       const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
       setCurrentAssetPath(result.asset_path);
-      setCurrentEmotion(result.emotion_tag ?? "neutral");
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -178,6 +189,7 @@ export default function ChatScreen() {
     }
   }
 
+  const currentEmotion = emotionFromPath(currentAssetPath);
   const glowRgb = EMOTION_GLOW_RGB[currentEmotion] || EMOTION_GLOW_RGB["neutral"];
   const hasGlow = Boolean(glowRgb);
   const glowColor = `rgb(${glowRgb})`;

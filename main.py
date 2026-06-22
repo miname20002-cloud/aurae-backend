@@ -300,8 +300,16 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
 
     match = EMO_TAG_PATTERN.search(raw_reply)
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "neutral"
-    reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
+     # question.mp4는 유일하게 음성이 들어있어서 - 첫 만남(첫 메시지)에서만 쓰이게 하고,
+    # 그 이후엔 "question" 태그가 나와도 think로 대체 (음성 영상 재사용 방지)
+    is_first_turn = session.query(ChatMessage).filter(
+        ChatMessage.user_id == user.id, ChatMessage.role == "user"
+    ).count() == 0
+    if emotion_tag == "question" and not is_first_turn:
+        emotion_tag = "think"
 
+    reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
+    
     asset_path = asset_map.resolve_asset(user.companion_id, emotion_tag, user.last_emotion_asset)
     user.last_emotion_asset = os.path.basename(asset_path)
     user.daily_message_count += 1
