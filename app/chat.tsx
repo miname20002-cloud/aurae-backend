@@ -31,7 +31,6 @@ export default function ChatScreen() {
   }>();
 
   const companion = companionByName(companionName ?? "") ?? null;
-  const userIdNum = Number(userId);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -55,7 +54,7 @@ export default function ChatScreen() {
     setSending(true);
 
     try {
-      const result = await sendChat({ userId: userIdNum, message: text });
+      const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
       setMood(result.mood ?? null);
     } catch (err) {
