@@ -1,31 +1,46 @@
 import { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import Screen from "@/components/Screen";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 import { useOnboarding } from "@/context/OnboardingContext";
+
+const NAME_REGEX = /^[a-zA-Z가-힣\s]+$/;
 
 export default function NameScreen() {
   const router = useRouter();
   const { setName } = useOnboarding();
   const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   function handleNext() {
     const trimmed = input.trim();
-    if (!trimmed) return;
+
+    if (trimmed.length < 2) {
+      setError("이름은 최소 2글자 이상 입력해주세요.");
+      return;
+    }
+    if (!NAME_REGEX.test(trimmed)) {
+      setError("한글 또는 영문만 사용할 수 있어요 (숫자/특수문자/이모지 불가).");
+      return;
+    }
+
+    setError(null);
     setName(trimmed);
     router.push("/onboarding/gender");
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>What should we call you?</Text>
         <Text style={styles.body}>Enter your name to continue.</Text>
-
         <TextInput
           value={input}
-          onChangeText={setInput}
+          onChangeText={(text) => {
+            setInput(text);
+            if (error) setError(null);
+          }}
           placeholder="Your name"
           placeholderTextColor={colors.textTertiary}
           style={styles.input}
@@ -33,9 +48,10 @@ export default function NameScreen() {
           autoCapitalize="words"
           returnKeyType="next"
           onSubmitEditing={handleNext}
+          maxLength={20}
         />
+        {error && <Text style={styles.error}>{error}</Text>}
       </View>
-
       <View style={styles.bottom}>
         <Pressable
           onPress={handleNext}
@@ -50,12 +66,11 @@ export default function NameScreen() {
             Next
           </Text>
         </Pressable>
-
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>← Back</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
@@ -90,6 +105,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textPrimary,
     backgroundColor: colors.surface,
+  },
+  error: {
+    marginTop: spacing.sm,
+    fontSize: 13,
+    color: colors.warning,
   },
   bottom: {
     paddingBottom: spacing.xl,

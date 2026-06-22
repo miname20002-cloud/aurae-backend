@@ -67,6 +67,12 @@ export type ChatResponse = {
   limit_reached?: boolean;
 };
 
+export type GreetingResponse = {
+  reply: string;
+  emotion_tag: string;
+  asset_path: string;
+};
+
 export type ChatHistoryItem = {
   role: "user" | "assistant";
   content: string;
@@ -181,6 +187,17 @@ export async function getChatHistory(): Promise<ChatHistoryResponse> {
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Chat history failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function getGreeting(): Promise<GreetingResponse> {
+  const response = await authorizedFetch("/chat/greeting", { method: "POST" });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Greeting failed (${response.status}): ${body}`);
   }
 
   return response.json();

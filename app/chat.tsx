@@ -24,7 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
-import { chat as sendChat, getChatHistory } from "@/lib/api";
+import { chat as sendChat, getChatHistory, getGreeting } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
 import { companionByName } from "@/lib/companions";
 import { getSession } from "@/lib/session";
@@ -88,6 +88,7 @@ export default function ChatScreen() {
   const [resumeKey, setResumeKey] = useState(0);
   const [userName, setUserName] = useState<string | null>(null);
   const nextId = useRef(0);
+  const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
 
   const breath = useSharedValue(0.4);
@@ -105,6 +106,7 @@ export default function ChatScreen() {
   useEffect(() => {
     const interval = setInterval(() => {
       StatusBar.setHidden(false, "none");
+      StatusBar.setBarStyle("light-content", true); 
     }, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -153,12 +155,26 @@ export default function ChatScreen() {
               };
             })
           );
-        }
-        if (history.asset_path) {
-          getActive().replace(assetUrl(history.asset_path));
-          getActive().play();
-          setReactionPath(history.asset_path);
-          setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
+          if (history.asset_path) {
+            getActive().replace(assetUrl(history.asset_path));
+            getActive().play();
+            setReactionPath(history.asset_path);
+            setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
+          }
+        } else if (!greetingTried.current) {
+          // 진짜 첫 만남 - 캐릭터가 먼저 인사하게
+          greetingTried.current = true;
+          try {
+            const greeting = await getGreeting();
+            nextId.current += 1;
+            setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
+            getActive().replace(assetUrl(greeting.asset_path));
+            getActive().play();
+            setReactionPath(greeting.asset_path);
+            setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
+          } catch {
+            // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음)
+          }
         }
       } catch {
         // 기록 불러오기 실패해도 빈 화면으로 시작

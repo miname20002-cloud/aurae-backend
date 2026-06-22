@@ -24,12 +24,8 @@ PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json
 engine = get_engine(os.environ.get("DATABASE_URL", "sqlite:///aurae.db"))
 print(f"[DB DEBUG] Using: {'POSTGRES' if 'postgresql' in str(engine.url) else 'SQLITE - fallback!'} | URL host: {engine.url.host}")
 
-# how many user turns between insight-extraction passes
 INSIGHT_REFRESH_INTERVAL = 6
 
-# free tier: cheaper model, capped messages per day. crisis messages never
-# count against this limit and never get downgraded - safety always runs
-# on the full pipeline regardless of tier.
 FREE_DAILY_MESSAGE_LIMIT = 25
 FREE_TIER_REPLY_MODEL = claude_client.FAST_MODEL
 PREMIUM_TIER_REPLY_MODEL = claude_client.MODEL
@@ -58,9 +54,9 @@ for _char_dir in ["Chloe_Assets", "Ethan_Assets", "Jayden_Assets", "Maya_Assets"
 class SignupRequest(BaseModel):
     name: str
     age_confirmed: bool
-    gender_preference: str  # "female" | "male"
-    companion_id: str       # one of PERSONAS keys
-    initial_tone: str = "unknown"  # "gentle" | "witty" | "unknown" - seeds comfort_style
+    gender_preference: str
+    companion_id: str
+    initial_tone: str = "unknown"
     device_id: str
 
 
@@ -69,7 +65,7 @@ class ChatRequest(BaseModel):
 
 
 class SetTierRequest(BaseModel):
-    tier: str  # "free" | "premium"
+    tier: str
 
 
 class RefreshRequest(BaseModel):
@@ -80,13 +76,6 @@ class RefreshRequest(BaseModel):
 
 @app.post("/debug/set-tier")
 def debug_set_tier(req: SetTierRequest, current_user_id: int = Depends(auth.get_current_user_id)):
-    """
-    TEMPORARY: manually flips a user's tier for testing the free/premium
-    split before real App Store / Play Store purchase verification is wired
-    up. Remove or lock this down (e.g. behind an admin secret) before any
-    real users are on the system - right now anyone who finds this endpoint
-    could grant themselves premium for free.
-    """
     if req.tier not in ("free", "premium"):
         raise HTTPException(status_code=400, detail="tier must be 'free' or 'premium'.")
     session = get_session(engine)
@@ -159,7 +148,6 @@ def refresh_token_endpoint(req: RefreshRequest):
     if auth.hash_refresh_token(req.refresh_token) != user.refresh_token_hash:
         raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
-    # Rotate: issue a brand new refresh token, invalidate the old one immediately.
     new_refresh_token = auth.generate_refresh_token()
     user.refresh_token_hash = auth.hash_refresh_token(new_refresh_token)
     user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=auth.REFRESH_TOKEN_TTL_DAYS)
@@ -171,11 +159,6 @@ def refresh_token_endpoint(req: RefreshRequest):
 
 @app.get("/chat/history")
 def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
-    """
-    Returns recent chat turns plus the user's last emotion asset, so the
-    frontend can rehydrate the chat screen (messages + avatar video state)
-    after a remount/app restart instead of always starting blank.
-    """
     session = get_session(engine)
     user = session.get(User, current_user_id)
     if not user:
@@ -190,8 +173,6 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
     )
     messages = [{"role": m.role, "content": m.content} for m in reversed(recent)]
 
-    # question.mp4는 첫 채팅에서만 보여줘야 하므로, 화면 재진입시 복원할 때는
-    # 마지막 감정이 question이었어도 그걸 다시 보여주지 않음 (프론트가 기본 평상시 영상으로 대체)
     asset_path = None
     if user.last_emotion_asset and "_question." not in user.last_emotion_asset:
         asset_path = asset_map.asset_path_for(user.companion_id, user.last_emotion_asset)
@@ -199,7 +180,13 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
     return {"messages": messages, "asset_path": asset_path}
 
 
-def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: dict, search_snippet: str | None) -> str:
+def _build_system_prompt(
+    persona: dict,
+    profile: UserInsightProfile,
+    turn_mood: dict,
+    search_snippet: str | None,
+    is_first_turn: bool,
+) -> str:
     patterns = json.loads(profile.emotional_patterns or "[]")
     topics = json.loads(profile.topics_of_interest or "[]")
     context_lines = []
@@ -226,7 +213,15 @@ def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: 
         "every message, and never stack more than one or two in a single reply."
     )
 
-    blocks = [persona["base_system_prompt"], level_note, context_block, mood_note, emoji_note]
+    intro_note = (
+        "This is the very first message you've ever exchanged with them - introduce yourself naturally."
+        if is_first_turn
+        else "You've already met and talked before - never reintroduce yourself by name again "
+        "(no \"hi, I'm [name]\" or \"it's [name]!\" type phrasing) since they already know who you are. "
+        "Just talk like you're continuing an ongoing relationship."
+    )
+
+    blocks = [persona["base_system_prompt"], level_note, context_block, mood_note, emoji_note, intro_note]
     if resonance_hint:
         blocks.append(resonance_hint)
     if search_snippet:
@@ -238,6 +233,53 @@ def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: 
     return "\n\n".join(b for b in blocks if b).strip()
 
 
+@app.post("/chat/greeting")
+def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
+    """
+    Generates the character's proactive opening line right after signup,
+    before the user has typed anything. Only works once - if any messages
+    already exist for this user, refuses (use /chat normally instead).
+    """
+    session = get_session(engine)
+    user = session.get(User, current_user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    existing = session.query(ChatMessage).filter(ChatMessage.user_id == user.id).count()
+    if existing > 0:
+        raise HTTPException(status_code=400, detail="Greeting already sent for this user.")
+
+    persona = PERSONAS[user.companion_id]
+    profile = session.get(UserInsightProfile, user.id)
+    reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
+
+    turn_mood = {"mood": "curious", "intensity": 3, "life_theme": "first meeting", "needs_realtime_info": False}
+    system_prompt = _build_system_prompt(persona, profile, turn_mood, None, True)
+
+    opener_instruction = (
+        "This is the very start of your first conversation with them - they haven't said "
+        "anything yet, this is your chance to message first. Open with a short, punchy, "
+        "attention-grabbing line that matches your personality and immediately makes this feel "
+        "different from a generic AI chatbot greeting. Be specific and a little surprising, not "
+        "generic small talk like 'how can I help you today.'"
+    )
+    history = [{"role": "user", "content": opener_instruction}]
+
+    raw_reply = claude_client.generate_reply(system_prompt, history, model=reply_model)
+
+    match = EMO_TAG_PATTERN.search(raw_reply)
+    emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "smile"
+    reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
+
+    asset_path = asset_map.resolve_asset(user.companion_id, emotion_tag, user.last_emotion_asset)
+    user.last_emotion_asset = os.path.basename(asset_path)
+
+    session.add(ChatMessage(user_id=user.id, role="assistant", content=reply))
+    session.commit()
+
+    return {"reply": reply, "emotion_tag": emotion_tag, "asset_path": asset_path}
+
+
 @app.post("/chat")
 def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_id)):
     session = get_session(engine)
@@ -246,10 +288,6 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         raise HTTPException(status_code=404, detail="User not found.")
     persona = PERSONAS[user.companion_id]
 
-    # Crisis screening always runs first, and the persona LLM is never the
-    # thing deciding whether this path triggers. Crisis turns are exempt
-    # from the daily limit and never get downgraded to the cheaper model -
-    # safety doesn't get rationed by subscription tier.
     if safety.screen_for_crisis(req.message):
         reply = safety.build_crisis_response(persona["name"])
         session.add(ChatMessage(user_id=user.id, role="user", content=req.message))
@@ -260,7 +298,6 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         session.commit()
         return {"reply": reply, "crisis_flagged": True, "emotion_tag": "neutral", "asset_path": asset_path}
 
-    # Daily message count, reset on UTC date change.
     today = date.today().isoformat()
     if user.daily_count_date != today:
         user.daily_count_date = today
@@ -283,13 +320,17 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
 
     profile = session.get(UserInsightProfile, user.id)
 
-    # Fast triage: mood + whether this turn needs real-world info.
+    # 시스템 프롬프트 만들기 전에 "첫 턴 여부" 먼저 확인 - 자기소개 반복 방지에 필요
+    is_first_turn = session.query(ChatMessage).filter(
+        ChatMessage.user_id == user.id, ChatMessage.role == "user"
+    ).count() == 0
+
     turn_mood = mood_module.classify_mood(req.message)
     search_snippet = None
     if turn_mood.get("needs_realtime_info") and turn_mood.get("search_query"):
         search_snippet = realtime_search.search(turn_mood["search_query"])
 
-    system_prompt = _build_system_prompt(persona, profile, turn_mood, search_snippet)
+    system_prompt = _build_system_prompt(persona, profile, turn_mood, search_snippet, is_first_turn)
 
     recent = (
         session.query(ChatMessage)
@@ -305,16 +346,12 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
 
     match = EMO_TAG_PATTERN.search(raw_reply)
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "neutral"
-     # question.mp4는 유일하게 음성이 들어있어서 - 첫 만남(첫 메시지)에서만 쓰이게 하고,
-    # 그 이후엔 "question" 태그가 나와도 think로 대체 (음성 영상 재사용 방지)
-    is_first_turn = session.query(ChatMessage).filter(
-        ChatMessage.user_id == user.id, ChatMessage.role == "user"
-    ).count() == 0
+
     if emotion_tag == "question" and not is_first_turn:
         emotion_tag = "think"
 
     reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
-    
+
     asset_path = asset_map.resolve_asset(user.companion_id, emotion_tag, user.last_emotion_asset)
     user.last_emotion_asset = os.path.basename(asset_path)
     user.daily_message_count += 1
@@ -349,7 +386,7 @@ def _refresh_insights(session, user, profile):
         raw = claude_client.extract_insights(excerpt)
         data = json.loads(raw)
     except Exception:
-        return  # don't let a parsing hiccup break the chat flow
+        return
 
     profile.emotional_patterns = json.dumps(data.get("emotional_patterns", []))
     profile.topics_of_interest = json.dumps(data.get("topics_of_interest", []))
