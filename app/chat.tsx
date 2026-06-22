@@ -38,14 +38,16 @@ function defaultNeutralPath(companionId: string): string {
   return `assets/${cap}_Assets/${cap}_neutral.mp4`;
 }
 
+// FIXED: neutral 및 think 상태에 캡처본과 동일한 선명한 네온 청록색(Cyan) RGB 바인딩
 const EMOTION_GLOW_RGB: Record<string, string> = {
-  smile: "255,214,107",
-  joy: "255,184,77",
-  blush: "255,143,171",
-  pout: "155,140,255",
-  think: "110,201,255",
-  wink: "255,143,203",
-  question: "140,217,255",
+  neutral: "0, 242, 254",   
+  think: "0, 242, 254",     
+  smile: "255, 214, 107",
+  joy: "255, 184, 77",
+  blush: "255, 143, 171",
+  pout: "155, 140, 255",
+  wink: "255, 143, 203",
+  question: "140, 217, 255",
 };
 
 export default function ChatScreen() {
@@ -67,10 +69,10 @@ export default function ChatScreen() {
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
 
-  const breath = useSharedValue(0.5);
+  const breath = useSharedValue(0.4); // 글로우가 완전히 꺼지지 않도록 최소 투명도 하한선 보정
   useEffect(() => {
     breath.value = withRepeat(
-      withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
       -1,
       true
     );
@@ -104,7 +106,7 @@ export default function ChatScreen() {
           setCurrentAssetPath(history.asset_path);
         }
       } catch {
-        // 기록 불러오기 실패해도 그냥 빈 화면으로 시작
+        // 기록 불러오기 실패해도 빈 화면으로 시작
       }
     })();
   }, []);
@@ -131,8 +133,6 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [currentAssetPath]);
 
-  // 메시지 목록이 바뀔 때마다 약간의 지연 후 한 번 더 확실하게 맨 아래로 내림
-  // (긴 메시지는 줄바꿈 높이 계산이 onContentSizeChange보다 늦게 끝나는 경우가 있음)
   useEffect(() => {
     const timeout = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true });
@@ -167,9 +167,9 @@ export default function ChatScreen() {
     }
   }
 
-  const glowRgb = EMOTION_GLOW_RGB[currentEmotion];
+  const glowRgb = EMOTION_GLOW_RGB[currentEmotion] || EMOTION_GLOW_RGB["neutral"];
   const hasGlow = Boolean(glowRgb);
-  const glowColor = hasGlow ? `rgb(${glowRgb})` : "rgb(0,0,0)";
+  const glowColor = `rgb(${glowRgb})`;
 
   return (
     <Screen style={styles.container}>
@@ -180,12 +180,17 @@ export default function ChatScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatarStack}>
+            
+            {/* FIXED: 외곽으로 연기처럼 넓게 번지는 오로라 라디얼 그라데이션 오프셋 튜닝 */}
             <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
               <Svg width={104} height={104} viewBox="0 0 104 104">
                 <Defs>
                   <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
-                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.55 : 0} />
-                    <Stop offset="55%" stopColor={glowColor} stopOpacity={hasGlow ? 0.22 : 0} />
+                    {/* 중심점: 풍부하고 묵직한 네온 색상 응집 */}
+                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.90 : 0} />
+                    {/* 아바타 테두리 경계선: 바깥으로 강하게 뿜어져 나오는 임계점 */}
+                    <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
+                    {/* 소멸부: 104px 바운더리 끝단에서 부드러운 스모크 형태로 증발 */}
                     <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
                   </RadialGradient>
                 </Defs>
@@ -193,10 +198,11 @@ export default function ChatScreen() {
               </Svg>
             </Animated.View>
 
+            {/* FIXED: 아바타 원형 테두리 선(Border) 자체에도 은은한 네온 발광 일체화 동기화 */}
             <View
               style={[
                 styles.avatarWrap,
-                { borderColor: hasGlow ? `rgba(${glowRgb}, 0.55)` : "transparent" },
+                { borderColor: hasGlow ? `rgba(${glowRgb}, 0.70)` : "transparent" },
               ]}
             >
               <VideoView
