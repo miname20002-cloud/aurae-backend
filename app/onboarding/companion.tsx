@@ -7,6 +7,15 @@ import { useOnboarding } from "@/context/OnboardingContext";
 import { companionsFor, Companion } from "@/lib/companions";
 import { assetUrl } from "@/lib/api";
 
+function hexToRgba(hex: string, alpha: number): string {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function CompanionAvatar({ companion }: { companion: Companion }) {
   const [attempt, setAttempt] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
@@ -19,8 +28,22 @@ function CompanionAvatar({ companion }: { companion: Companion }) {
     }
   }
 
+  const glowStrong = hexToRgba(companion.accent, 0.6);
+  const glowSoft = hexToRgba(companion.accent, 0.3);
+  const glowInset = hexToRgba(companion.accent, 0.4);
+  const borderColor = hexToRgba(companion.accent, 0.5);
+
   return (
-    <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
+    <View
+      style={[
+        styles.avatar,
+        {
+          backgroundColor: companion.accent,
+          borderColor,
+          boxShadow: `0 0 10px ${glowStrong}, 0 0 20px ${glowSoft}, inset 0 0 10px ${glowInset}`,
+        },
+      ]}
+    >
       {!imageFailed && (
         <Image
           key={attempt}
@@ -116,6 +139,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+    borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
