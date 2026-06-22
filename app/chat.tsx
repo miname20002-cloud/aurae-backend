@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
+import Svg, { Defs, Mask, Rect, Circle } from "react-native-svg";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
 import { chat as sendChat, getChatHistory } from "@/lib/api";
@@ -30,15 +31,15 @@ function defaultNeutralPath(companionId: string): string {
   return `assets/${cap}_Assets/${cap}_neutral.mp4`;
 }
 
-const EMOTION_GLOW: Record<string, string> = {
-  neutral: "transparent",
-  smile: "rgba(255, 214, 107, 0.45)",
-  joy: "rgba(255, 184, 77, 0.5)",
-  blush: "rgba(255, 143, 171, 0.5)",
-  pout: "rgba(155, 140, 255, 0.45)",
-  think: "rgba(110, 201, 255, 0.45)",
-  wink: "rgba(255, 143, 203, 0.45)",
-  question: "rgba(140, 217, 255, 0.45)",
+// 감정별 글로우 색상의 RGB 베이스값 (알파값은 레이어마다 다르게 조합)
+const EMOTION_GLOW_RGB: Record<string, string> = {
+  smile: "255,214,107",
+  joy: "255,184,77",
+  blush: "255,143,171",
+  pout: "155,140,255",
+  think: "110,201,255",
+  wink: "255,143,203",
+  question: "140,217,255",
 };
 
 export default function ChatScreen() {
@@ -98,8 +99,6 @@ export default function ChatScreen() {
     player.play();
   }, [currentAssetPath]);
 
-  // 안드로이드는 백그라운드 갔다오면 영상 표면(Surface)이 사라져서,
-  // 단순 play()로는 복구가 안 됨 - 소스 다시 불러오기 + VideoView 강제 재생성으로 복구
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
@@ -141,7 +140,12 @@ export default function ChatScreen() {
     }
   }
 
-  const glowColor = EMOTION_GLOW[currentEmotion] ?? "transparent";
+  const glowRgb = EMOTION_GLOW_RGB[currentEmotion];
+  const hasGlow = Boolean(glowRgb);
+  const glowBoxShadow = hasGlow
+    ? `0 0 10px rgba(${glowRgb}, 0.6), 0 0 20px rgba(${glowRgb}, 0.3), inset 0 0 10px rgba(${glowRgb}, 0.35)`
+    : "none";
+  const glowBorderColor = hasGlow ? `rgba(${glowRgb}, 0.5)` : "transparent";
 
   return (
     <Screen style={styles.container}>
@@ -154,15 +158,10 @@ export default function ChatScreen() {
           <View
             style={[
               styles.avatarShadowHost,
-              {
-                boxShadow:
-                  glowColor !== "transparent"
-                    ? `0 0 20px 6px ${glowColor}`
-                    : "none",
-              },
+              { boxShadow: glowBoxShadow },
             ]}
           >
-            <View style={styles.avatarWrap}>
+            <View style={[styles.avatarWrap, { borderColor: glowBorderColor }]}>
               <VideoView
                 key={resumeKey}
                 player={player}
@@ -170,6 +169,22 @@ export default function ChatScreen() {
                 contentFit="cover"
                 nativeControls={false}
               />
+              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
+                <Defs>
+                  <Mask id="avatarCircleMask">
+                    <Rect x="0" y="0" width="72" height="72" fill="white" />
+                    <Circle cx="36" cy="36" r="34" fill="black" />
+                  </Mask>
+                </Defs>
+                <Rect
+                  x="0"
+                  y="0"
+                  width="72"
+                  height="72"
+                  fill={colors.background}
+                  mask="url(#avatarCircleMask)"
+                />
+              </Svg>
             </View>
           </View>
           <View style={styles.headerText}>
@@ -257,14 +272,13 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
+    borderWidth: 2,
     overflow: "hidden",
     backgroundColor: colors.surface,
   },
   avatarMedia: {
     width: "100%",
     height: "100%",
-    borderRadius: 36,
-    overflow: "hidden",
   },
   headerText: {
     flex: 1,
