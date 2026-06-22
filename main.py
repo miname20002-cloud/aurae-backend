@@ -215,7 +215,13 @@ def _build_system_prompt(persona: dict, profile: UserInsightProfile, turn_mood: 
 
     resonance_hint = resonance.pick_hint(turn_mood["life_theme"])
 
-    blocks = [persona["base_system_prompt"], level_note, context_block, mood_note]
+    emoji_note = (
+        "Texting style: feel free to drop in a fitting emoji here and there when it genuinely "
+        "matches the moment - the way a real person texting a friend would. Don't force one into "
+        "every message, and never stack more than one or two in a single reply."
+    )
+
+    blocks = [persona["base_system_prompt"], level_note, context_block, mood_note, emoji_note]
     if resonance_hint:
         blocks.append(resonance_hint)
     if search_snippet:
