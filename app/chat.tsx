@@ -33,9 +33,9 @@ type Message = {
   text: string;
 };
 
-// question.mp4는 유일하게 음성이 들어있어서, 평상시 대기 로테이션에선 빼고
-// 실제로 AI가 "question" 감정으로 반응할 때만 쓰이게 둠
-const IDLE_EMOTIONS = ["neutral", "smile", "joy", "think", "wink"];
+// question.mp4는 음성이 들어있어서 평상시 로테이션에서는 제외 - 첫 채팅 응답에서만
+// (백엔드에서 그 이후엔 재사용 안 되게 막아줌) 등장할 수 있음
+const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -124,23 +124,21 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!currentAssetPath) return;
     player.replace(assetUrl(currentAssetPath));
-    player.loop = false; // 항상 한 번만 재생, 다음 클립으로 넘어가는 건 직접 제어
+    player.loop = false;
     player.play();
   }, [currentAssetPath]);
 
-  // 영상 하나가 끝나면(반응이든 평상시든) 평상시 로테이션의 다음 표정으로 자연스럽게 이어감
+  // 타이머 기반으로 다음 표정 전환 - playToEnd 네이티브 이벤트보다 안정적
+  // (영상 ~5초 재생 + 마지막 프레임에서 잠깐 정지 후 다음 표정으로)
   useEffect(() => {
-    const subscription = player.addListener("playToEnd", () => {
+    if (!currentAssetPath || !companion) return;
+    const timer = setTimeout(() => {
       const nextIdx = (idleIndex + 1) % IDLE_EMOTIONS.length;
       setIdleIndex(nextIdx);
-      if (companion) {
-        setCurrentAssetPath(emotionClipPath(companion.id, IDLE_EMOTIONS[nextIdx]));
-      }
-    });
-    return () => {
-      subscription?.remove();
-    };
-  }, [idleIndex, companion]);
+      setCurrentAssetPath(emotionClipPath(companion.id, IDLE_EMOTIONS[nextIdx]));
+    }, 7500);
+    return () => clearTimeout(timer);
+  }, [currentAssetPath]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {

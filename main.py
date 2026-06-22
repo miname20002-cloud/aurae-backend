@@ -189,7 +189,12 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
         .all()
     )
     messages = [{"role": m.role, "content": m.content} for m in reversed(recent)]
-    asset_path = asset_map.asset_path_for(user.companion_id, user.last_emotion_asset)
+
+    # question.mp4는 첫 채팅에서만 보여줘야 하므로, 화면 재진입시 복원할 때는
+    # 마지막 감정이 question이었어도 그걸 다시 보여주지 않음 (프론트가 기본 평상시 영상으로 대체)
+    asset_path = None
+    if user.last_emotion_asset and "_question." not in user.last_emotion_asset:
+        asset_path = asset_map.asset_path_for(user.companion_id, user.last_emotion_asset)
 
     return {"messages": messages, "asset_path": asset_path}
 
