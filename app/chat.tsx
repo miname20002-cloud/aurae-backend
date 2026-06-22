@@ -31,7 +31,6 @@ function defaultNeutralPath(companionId: string): string {
   return `assets/${cap}_Assets/${cap}_neutral.mp4`;
 }
 
-// 감정별 글로우 색상의 RGB 베이스값 (알파값은 레이어마다 다르게 조합)
 const EMOTION_GLOW_RGB: Record<string, string> = {
   smile: "255,214,107",
   joy: "255,184,77",
@@ -142,10 +141,6 @@ export default function ChatScreen() {
 
   const glowRgb = EMOTION_GLOW_RGB[currentEmotion];
   const hasGlow = Boolean(glowRgb);
-  const glowBoxShadow = hasGlow
-    ? `0 0 10px rgba(${glowRgb}, 0.6), 0 0 20px rgba(${glowRgb}, 0.3), inset 0 0 10px rgba(${glowRgb}, 0.35)`
-    : "none";
-  const glowBorderColor = hasGlow ? `rgba(${glowRgb}, 0.5)` : "transparent";
 
   return (
     <Screen style={styles.container}>
@@ -157,34 +152,53 @@ export default function ChatScreen() {
         <View style={styles.header}>
           <View
             style={[
-              styles.avatarShadowHost,
-              { boxShadow: glowBoxShadow },
+              styles.glowOuter,
+              hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.12)` },
             ]}
           >
-            <View style={[styles.avatarWrap, { borderColor: glowBorderColor }]}>
-              <VideoView
-                key={resumeKey}
-                player={player}
-                style={styles.avatarMedia}
-                contentFit="cover"
-                nativeControls={false}
-              />
-              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
-                <Defs>
-                  <Mask id="avatarCircleMask">
-                    <Rect x="0" y="0" width="72" height="72" fill="white" />
-                    <Circle cx="36" cy="36" r="34" fill="black" />
-                  </Mask>
-                </Defs>
-                <Rect
-                  x="0"
-                  y="0"
-                  width="72"
-                  height="72"
-                  fill={colors.background}
-                  mask="url(#avatarCircleMask)"
-                />
-              </Svg>
+            <View
+              style={[
+                styles.glowMid,
+                hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.22)` },
+              ]}
+            >
+              <View
+                style={[
+                  styles.glowInner,
+                  hasGlow && { backgroundColor: `rgba(${glowRgb}, 0.35)` },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.avatarWrap,
+                    { borderColor: hasGlow ? `rgba(${glowRgb}, 0.6)` : "transparent" },
+                  ]}
+                >
+                  <VideoView
+                    key={resumeKey}
+                    player={player}
+                    style={styles.avatarMedia}
+                    contentFit="cover"
+                    nativeControls={false}
+                  />
+                  <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
+                    <Defs>
+                      <Mask id="avatarCircleMask">
+                        <Rect x="0" y="0" width="72" height="72" fill="white" />
+                        <Circle cx="36" cy="36" r="34" fill="black" />
+                      </Mask>
+                    </Defs>
+                    <Rect
+                      x="0"
+                      y="0"
+                      width="72"
+                      height="72"
+                      fill={colors.background}
+                      mask="url(#avatarCircleMask)"
+                    />
+                  </Svg>
+                </View>
+              </View>
             </View>
           </View>
           <View style={styles.headerText}>
@@ -261,10 +275,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  avatarShadowHost: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  glowOuter: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowMid: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowInner: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: "center",
     justifyContent: "center",
   },
