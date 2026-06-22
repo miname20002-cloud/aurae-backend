@@ -8,15 +8,27 @@ import { companionsFor, Companion } from "@/lib/companions";
 import { assetUrl } from "@/lib/api";
 
 function CompanionAvatar({ companion }: { companion: Companion }) {
+  const [attempt, setAttempt] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
+
+  function handleError() {
+    if (attempt < 2) {
+      // Render 콜드스타트로 잠깐 실패하는 경우가 있어서, 바로 포기하지 않고
+      // 1.5초 후 한 번 더 시도해봄 (최대 2번 재시도).
+      setTimeout(() => setAttempt((a) => a + 1), 1500);
+    } else {
+      setImageFailed(true);
+    }
+  }
 
   return (
     <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
       {!imageFailed && (
         <Image
+          key={attempt}
           source={{ uri: assetUrl(companion.facePath) }}
           style={styles.avatarImage}
-          onError={() => setImageFailed(true)}
+          onError={handleError}
         />
       )}
       {imageFailed && <Text style={styles.avatarText}>{companion.initial}</Text>}
@@ -27,7 +39,6 @@ function CompanionAvatar({ companion }: { companion: Companion }) {
 export default function CompanionScreen() {
   const router = useRouter();
   const { genderPreference, setCompanionId } = useOnboarding();
-
   // Falls back to "female" if someone lands here directly without picking
   // a gender first - keeps this screen from crashing rather than enforcing
   // strict navigation order.
@@ -43,7 +54,6 @@ export default function CompanionScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Pick your soul match</Text>
         <Text style={styles.body}>Choose who feels right.</Text>
-
         <View style={styles.optionRow}>
           {options.map((companion) => (
             <Pressable
@@ -57,7 +67,6 @@ export default function CompanionScreen() {
           ))}
         </View>
       </View>
-
       <View style={styles.bottom}>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>← Back</Text>
