@@ -97,6 +97,16 @@ def debug_personas():
     return {"companion_ids": list(PERSONAS.keys())}
 
 
+@app.get("/debug/db-info")
+def debug_db_info():
+    return {
+        "dialect": engine.dialect.name,
+        "host": engine.url.host,
+        "database": engine.url.database,
+        "raw_env_set": "DATABASE_URL" in os.environ,
+    }
+
+
 @app.post("/signup")
 def signup(req: SignupRequest):
     if not req.age_confirmed:
