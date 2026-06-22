@@ -9,12 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
-import { chat as sendChat } from "@/lib/api";
+import { chat as sendChat, getChatHistory } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
 import { companionByName } from "@/lib/companions";
 
@@ -51,6 +52,32 @@ export default function ChatScreen() {
     p.play();
   });
 
+  // 화면 처음 열릴 때: 백엔드에 저장된 최근 대화 기록 + 마지막 감정상태 불러오기
+  useEffect(() => {
+    (async () => {
+      try {
+        const history = await getChatHistory();
+        if (history.messages.length > 0) {
+          setMessages(
+            history.messages.map((m) => {
+              nextId.current += 1;
+              return {
+                id: String(nextId.current),
+                role: m.role === "user" ? "user" : "assistant",
+                text: m.content,
+              };
+            })
+          );
+        }
+        if (history.asset_path) {
+          setCurrentAssetPath(history.asset_path);
+        }
+      } catch {
+        // 기록 불러오기 실패해도 그냥 빈 화면으로 시작 (치명적이지 않음)
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (!currentAssetPath) return;
     const url = assetUrl(currentAssetPath);
@@ -58,6 +85,16 @@ export default function ChatScreen() {
     player.loop = currentAssetPath === initialPath;
     player.play();
   }, [currentAssetPath]);
+
+  // 앱이 백그라운드 갔다가 다시 돌아올 때 영상 재생 다시 트리거
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        player.play();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   function addMessage(role: "user" | "assistant", text: string) {
     nextId.current += 1;
