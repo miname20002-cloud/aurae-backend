@@ -28,31 +28,28 @@ function CompanionAvatar({ companion }: { companion: Companion }) {
     }
   }
 
-  const glowStrong = hexToRgba(companion.accent, 0.6);
-  const glowSoft = hexToRgba(companion.accent, 0.3);
-  const glowInset = hexToRgba(companion.accent, 0.4);
-  const borderColor = hexToRgba(companion.accent, 0.5);
+  const glowOuter = hexToRgba(companion.accent, 0.12);
+  const glowMid = hexToRgba(companion.accent, 0.22);
+  const glowInner = hexToRgba(companion.accent, 0.35);
+  const borderColor = hexToRgba(companion.accent, 0.6);
 
   return (
-    <View
-      style={[
-        styles.avatar,
-        {
-          backgroundColor: companion.accent,
-          borderColor,
-          boxShadow: `0 0 10px ${glowStrong}, 0 0 20px ${glowSoft}, inset 0 0 10px ${glowInset}`,
-        },
-      ]}
-    >
-      {!imageFailed && (
-        <Image
-          key={attempt}
-          source={{ uri: assetUrl(companion.facePath) }}
-          style={styles.avatarImage}
-          onError={handleError}
-        />
-      )}
-      {imageFailed && <Text style={styles.avatarText}>{companion.initial}</Text>}
+    <View style={[styles.glowOuter, { backgroundColor: glowOuter }]}>
+      <View style={[styles.glowMid, { backgroundColor: glowMid }]}>
+        <View style={[styles.glowInner, { backgroundColor: glowInner }]}>
+          <View style={[styles.avatar, { backgroundColor: companion.accent, borderColor }]}>
+            {!imageFailed && (
+              <Image
+                key={attempt}
+                source={{ uri: assetUrl(companion.facePath) }}
+                style={styles.avatarImage}
+                onError={handleError}
+              />
+            )}
+            {imageFailed && <Text style={styles.avatarText}>{companion.initial}</Text>}
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
@@ -134,6 +131,27 @@ const styles = StyleSheet.create({
   },
   optionPressed: {
     borderColor: colors.accent,
+  },
+  glowOuter: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowMid: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatar: {
     width: 48,
