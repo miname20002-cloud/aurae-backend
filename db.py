@@ -38,7 +38,7 @@ class ChatMessage(Base):
 class UserInsightProfile(Base):
     __tablename__ = "user_insight_profiles"
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    relationship_level = Column(Integer, default=1)
+    relationship_level = Column(Integer, default=1) 
     emotional_patterns = Column(Text, default="[]")   # JSON-encoded list of short tags
     comfort_style = Column(String, default="unknown")  # e.g. direct / gentle / hype
     topics_of_interest = Column(Text, default="[]")   # JSON-encoded list of tags
