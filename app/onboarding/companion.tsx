@@ -13,8 +13,6 @@ function CompanionAvatar({ companion }: { companion: Companion }) {
 
   function handleError() {
     if (attempt < 2) {
-      // Render 콜드스타트로 잠깐 실패하는 경우가 있어서, 바로 포기하지 않고
-      // 1.5초 후 한 번 더 시도해봄 (최대 2번 재시도).
       setTimeout(() => setAttempt((a) => a + 1), 1500);
     } else {
       setImageFailed(true);
@@ -39,9 +37,6 @@ function CompanionAvatar({ companion }: { companion: Companion }) {
 export default function CompanionScreen() {
   const router = useRouter();
   const { genderPreference, setCompanionId } = useOnboarding();
-  // Falls back to "female" if someone lands here directly without picking
-  // a gender first - keeps this screen from crashing rather than enforcing
-  // strict navigation order.
   const options = companionsFor(genderPreference ?? "female");
 
   function choose(id: string) {
@@ -62,7 +57,9 @@ export default function CompanionScreen() {
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
               <CompanionAvatar companion={companion} />
-              <Text style={styles.optionText}>{companion.name}</Text>
+              <Text style={[styles.optionText, { color: companion.accent }]}>
+                {companion.name}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -135,7 +132,6 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.textPrimary,
   },
   bottom: {
     paddingBottom: spacing.xl,
