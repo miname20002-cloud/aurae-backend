@@ -23,6 +23,7 @@ PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json
 engine = engine = get_engine(os.environ.get("DATABASE_URL", "sqlite:///aurae.db"))
 
 # how many user turns between insight-extraction passes
+print(f"[DB DEBUG] Using: {'POSTGRES' if 'postgresql' in str(engine.url) else 'SQLITE - fallback!'} | URL host: {engine.url.host}")
 INSIGHT_REFRESH_INTERVAL = 6
 
 # free tier: cheaper model, capped messages per day. crisis messages never
