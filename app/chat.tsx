@@ -38,10 +38,9 @@ function defaultNeutralPath(companionId: string): string {
   return `assets/${cap}_Assets/${cap}_neutral.mp4`;
 }
 
-// FIXED: neutral 및 think 상태에 캡처본과 동일한 선명한 네온 청록색(Cyan) RGB 바인딩
 const EMOTION_GLOW_RGB: Record<string, string> = {
-  neutral: "0, 242, 254",   
-  think: "0, 242, 254",     
+  neutral: "0, 242, 254",
+  think: "0, 242, 254",
   smile: "255, 214, 107",
   joy: "255, 184, 77",
   blush: "255, 143, 171",
@@ -69,7 +68,7 @@ export default function ChatScreen() {
   const nextId = useRef(0);
   const listRef = useRef<FlatList>(null);
 
-  const breath = useSharedValue(0.4); // 글로우가 완전히 꺼지지 않도록 최소 투명도 하한선 보정
+  const breath = useSharedValue(0.4);
   useEffect(() => {
     breath.value = withRepeat(
       withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
@@ -180,17 +179,12 @@ export default function ChatScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatarStack}>
-            
-            {/* FIXED: 외곽으로 연기처럼 넓게 번지는 오로라 라디얼 그라데이션 오프셋 튜닝 */}
             <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
               <Svg width={104} height={104} viewBox="0 0 104 104">
                 <Defs>
                   <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
-                    {/* 중심점: 풍부하고 묵직한 네온 색상 응집 */}
-                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.90 : 0} />
-                    {/* 아바타 테두리 경계선: 바깥으로 강하게 뿜어져 나오는 임계점 */}
+                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
                     <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
-                    {/* 소멸부: 104px 바운더리 끝단에서 부드러운 스모크 형태로 증발 */}
                     <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
                   </RadialGradient>
                 </Defs>
@@ -198,13 +192,7 @@ export default function ChatScreen() {
               </Svg>
             </Animated.View>
 
-            {/* FIXED: 아바타 원형 테두리 선(Border) 자체에도 은은한 네온 발광 일체화 동기화 */}
-            <View
-              style={[
-                styles.avatarWrap,
-                { borderColor: hasGlow ? `rgba(${glowRgb}, 0.70)` : "transparent" },
-              ]}
-            >
+            <View style={styles.avatarWrap}>
               <VideoView
                 key={resumeKey}
                 player={player}
@@ -300,7 +288,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingTop: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.lg,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -320,7 +309,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    borderWidth: 2,
     overflow: "hidden",
     backgroundColor: colors.surface,
   },
