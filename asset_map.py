@@ -6,6 +6,14 @@ recently renamed to match Ethan/Jayden/Maya's convention. The one remaining
 one-off: Maya has two variants for "think" (Maya_think.mp4, Maya_think1.mp4),
 everyone else has exactly one file per emotion.
 
+NOTE: "question" is intentionally excluded from EMOTION_TAGS below - the
+model can never select it anymore, since its file is the only one with
+voiceover and it kept surfacing mid-conversation in a jarring way (and the
+model occasionally asked the user's name out loud alongside it, which is
+redundant since the user already gave their name at signup). The asset
+mapping entries are left in CHARACTER_ASSETS in case this gets revisited
+later, but resolve_asset will never be called with "question" in practice.
+
 The model is still given a wider tag vocabulary (EMOTION_TAGS) than any
 single character's file set, with blush/pout falling back to the nearest
 available emotion through FALLBACK_CHAIN. This keeps the system resilient
@@ -21,7 +29,8 @@ import random
 ASSET_ROOT = os.environ.get("ASSET_ROOT", "assets")
 
 # The full vocabulary the model is allowed to choose from each turn.
-EMOTION_TAGS = ["neutral", "smile", "joy", "blush", "pout", "think", "wink", "question"]
+# "question" deliberately omitted - see module docstring.
+EMOTION_TAGS = ["neutral", "smile", "joy", "blush", "pout", "think", "wink"]
 
 # tag -> ordered fallback chain (first one that exists for the character wins)
 FALLBACK_CHAIN = {
@@ -32,7 +41,6 @@ FALLBACK_CHAIN = {
     "pout": ["pout", "think", "neutral"],
     "think": ["think", "neutral"],
     "wink": ["wink", "smile", "neutral"],
-    "question": ["question", "think", "neutral"],
 }
 
 CHARACTER_ASSETS = {

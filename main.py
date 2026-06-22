@@ -186,10 +186,14 @@ def _build_system_prompt(
     turn_mood: dict,
     search_snippet: str | None,
     is_first_turn: bool,
+    user_name: str,
 ) -> str:
     patterns = json.loads(profile.emotional_patterns or "[]")
     topics = json.loads(profile.topics_of_interest or "[]")
-    context_lines = []
+    context_lines = [
+        f"Their name is {user_name} - you already know this from when they signed up, "
+        "so never ask them what their name is or who they are, even casually or jokingly."
+    ]
     if patterns:
         context_lines.append("Things you've noticed about this person: " + ", ".join(patterns))
     if topics:
@@ -254,14 +258,15 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
 
     turn_mood = {"mood": "curious", "intensity": 3, "life_theme": "first meeting", "needs_realtime_info": False}
-    system_prompt = _build_system_prompt(persona, profile, turn_mood, None, True)
+    system_prompt = _build_system_prompt(persona, profile, turn_mood, None, True, user.name)
 
     opener_instruction = (
         "This is the very start of your first conversation with them - they haven't said "
         "anything yet, this is your chance to message first. Open with a short, punchy, "
         "attention-grabbing line that matches your personality and immediately makes this feel "
         "different from a generic AI chatbot greeting. Be specific and a little surprising, not "
-        "generic small talk like 'how can I help you today.'"
+        "generic small talk like 'how can I help you today.' Use their name naturally if it "
+        "fits, but don't ask what it is - you already know it."
     )
     history = [{"role": "user", "content": opener_instruction}]
 
@@ -320,7 +325,6 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
 
     profile = session.get(UserInsightProfile, user.id)
 
-    # 시스템 프롬프트 만들기 전에 "첫 턴 여부" 먼저 확인 - 자기소개 반복 방지에 필요
     is_first_turn = session.query(ChatMessage).filter(
         ChatMessage.user_id == user.id, ChatMessage.role == "user"
     ).count() == 0
@@ -330,7 +334,7 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
     if turn_mood.get("needs_realtime_info") and turn_mood.get("search_query"):
         search_snippet = realtime_search.search(turn_mood["search_query"])
 
-    system_prompt = _build_system_prompt(persona, profile, turn_mood, search_snippet, is_first_turn)
+    system_prompt = _build_system_prompt(persona, profile, turn_mood, search_snippet, is_first_turn, user.name)
 
     recent = (
         session.query(ChatMessage)
@@ -346,10 +350,6 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
 
     match = EMO_TAG_PATTERN.search(raw_reply)
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "neutral"
-
-    if emotion_tag == "question" and not is_first_turn:
-        emotion_tag = "think"
-
     reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
 
     asset_path = asset_map.resolve_asset(user.companion_id, emotion_tag, user.last_emotion_asset)
