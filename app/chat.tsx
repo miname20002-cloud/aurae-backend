@@ -67,6 +67,14 @@ function emotionClipPath(companionId: string, emotion: string): string {
   return `assets/${cap}_Assets/${cap}_${emotion}.mp4`;
 }
 
+function introClipPath(companionId: string): string {
+  // Matches the backend's chat_greeting() path formula exactly. Computed
+  // locally so the intro video can start the instant the user enters,
+  // without waiting on the greeting API response first.
+  const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
+  return `assets/${cap}_Assets/${cap}_intro.mp4`;
+}
+
 function emotionFromPath(path: string | null): string {
   if (!path) return "neutral";
   const match = path.match(/_(\w+)\.mp4$/);
@@ -462,20 +470,26 @@ export default function ChatScreen() {
           greetingTried.current = true;
           setShowIntroOverlay(true);
           introOverlayOpacity.value = 1;
-          try {
-            const greeting = await getGreeting();
-            if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
-            if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
 
-            // 인사 영상(Chloe_intro.mp4 등)은 시선을 집중시키는 한 번뿐인
-            // 연출이라, 작은 아바타가 아니라 채팅창 전체를 덮는 오버레이로
-            // 보여준다. 끝날 때까지 메시지 말풍선과 입력창도 같이 묻어둔다.
-            introPlayer.replace(assetUrl(greeting.asset_path));
+          // 인사 영상(Chloe_intro.mp4 등)의 경로는 캐릭터만 알면 바로 계산
+          // 가능하니, 인사 API 응답을 기다리지 않고 암전 직후 곧바로 재생
+          // 시작한다 - API 호출(LLM 응답 생성)은 영상이 도는 동안 백그라운드
+          // 에서 병렬로 처리한다.
+          if (companion) {
+            introPlayer.replace(assetUrl(introClipPath(companion.id)));
             introPlayer.play();
-            triggerIntroFlash();
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          }
 
-            setTimeout(() => {
+          const greetingPromise = getGreeting();
+          greetingPromise.catch(() => {}); // 콘솔의 unhandled rejection 경고 방지용 - 실제 에러 처리는 아래 setTimeout 안에서 한다
+
+          setTimeout(async () => {
+            try {
+              const greeting = await greetingPromise;
+              if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
+              if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
+
               // 영상 위에서 스파클이 잠깐 보이고, 그 다음 오버레이가 부드럽게
               // 페이드아웃되면서 이미 준비된 메시지가 자연스럽게 드러난다.
               triggerSparkleBurst();
@@ -492,14 +506,14 @@ export default function ChatScreen() {
                   setInitializing(false);
                 }, INTRO_FADE_OUT_MS);
               }, SPARKLE_LINGER_MS);
-            }, INTRO_VIDEO_DURATION_MS);
-          } catch {
-            // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
-            // 띄워둔 채로 멈춰있으면 안 되니 반드시 내려준다.
-            introOverlayOpacity.value = 0;
-            setShowIntroOverlay(false);
-            setInitializing(false);
-          }
+            } catch {
+              // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
+              // 띄워둔 채로 멈춰있으면 안 되니 반드시 내려준다.
+              introOverlayOpacity.value = 0;
+              setShowIntroOverlay(false);
+              setInitializing(false);
+            }
+          }, INTRO_VIDEO_DURATION_MS);
         } else {
           setInitializing(false);
         }
