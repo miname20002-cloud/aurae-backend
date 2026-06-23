@@ -30,6 +30,11 @@ app.include_router(rewards.router)
 INSIGHT_REFRESH_INTERVAL = 6
 
 FREE_DAILY_MESSAGE_LIMIT = 25
+# Premium is marketed as "unlimited" - this cap is intentionally high enough
+# that no normal user will ever hit it. It exists purely as a cost safety
+# net against extreme outliers, given premium runs the more expensive Sonnet
+# model with no per-message API cost passed through to the user.
+PREMIUM_DAILY_MESSAGE_LIMIT = 300
 FREE_TIER_REPLY_MODEL = claude_client.FAST_MODEL
 PREMIUM_TIER_REPLY_MODEL = claude_client.MODEL
 
@@ -37,6 +42,10 @@ LIMIT_REACHED_REPLY = (
     "{name} smiles. \"hey, you've used up today's messages with me - I'll be right "
     "here when they reset tomorrow. if you don't want to wait, Aurae Premium gets you "
     "unlimited time together.\""
+)
+PREMIUM_LIMIT_REACHED_REPLY = (
+    "{name} grins. \"okay we have officially talked SO much today, I love it - "
+    "let's pick this up again tomorrow, yeah? I'll be right here.\""
 )
 
 EMO_TAG_PATTERN = re.compile(r"\[EMO:(\w+)\]")
@@ -343,8 +352,10 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         user.daily_message_count = 0
         session.commit()
 
-    if user.tier != "premium" and user.daily_message_count >= FREE_DAILY_MESSAGE_LIMIT:
-        reply = LIMIT_REACHED_REPLY.format(name=persona["name"])
+    daily_limit = PREMIUM_DAILY_MESSAGE_LIMIT if user.tier == "premium" else FREE_DAILY_MESSAGE_LIMIT
+    if user.daily_message_count >= daily_limit:
+        reply_template = PREMIUM_LIMIT_REACHED_REPLY if user.tier == "premium" else LIMIT_REACHED_REPLY
+        reply = reply_template.format(name=persona["name"])
         asset_path = asset_map.resolve_asset(user.companion_id, "neutral", user.last_emotion_asset)
         return {
             "reply": reply,
