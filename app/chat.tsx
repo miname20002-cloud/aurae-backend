@@ -501,6 +501,10 @@ export default function ChatScreen() {
                 nextId.current += 1;
                 setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
                 setTimeout(() => {
+                  // 영상이 끝나도 플레이어가 "재생 중" 상태로 남아있으면,
+                  // 화면 캡처 제스처처럼 화면이 잠깐 다시 그려지는 순간에
+                  // 음성만 다시 살아날 수 있다 - 명시적으로 멈춰서 막는다.
+                  introPlayer.pause();
                   setShowIntroOverlay(false);
                   setInitializing(false);
                 }, INTRO_FADE_OUT_MS);
@@ -508,6 +512,7 @@ export default function ChatScreen() {
             } catch {
               // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
               // 띄워둔 채로 멈춰있으면 안 되니 반드시 내려준다.
+              introPlayer.pause();
               introOverlayOpacity.value = 0;
               setShowIntroOverlay(false);
               setInitializing(false);
