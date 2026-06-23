@@ -531,8 +531,10 @@ export default function ChatScreen() {
           </View>
 
           <View style={styles.headerSide}>
-            <View style={styles.userAvatarCircle}>
-              <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
+            <View style={styles.userAvatarStack}>
+              <View style={styles.userAvatarCircle}>
+                <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
+              </View>
             </View>
             {userName && (
               <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">
@@ -656,7 +658,7 @@ const styles = StyleSheet.create({
   },
   headerSide: {
     alignItems: "center",
-    width: 78,
+    width: 104,
   },
   sideName: {
     fontSize: 12,
@@ -692,6 +694,12 @@ const styles = StyleSheet.create({
   avatarMedia: {
     width: "100%",
     height: "100%",
+  },
+  userAvatarStack: {
+    width: 104,
+    height: 104,
+    alignItems: "center",
+    justifyContent: "center",
   },
   userAvatarCircle: {
     width: 72,
