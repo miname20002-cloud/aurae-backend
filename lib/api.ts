@@ -1,721 +1,298 @@
-import { useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  FlatList,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  AppState,
-  StatusBar,
-  Share,
-  Modal,
-} from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
-import Svg, { Defs, Mask, Rect, Circle, RadialGradient, Stop } from "react-native-svg";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
-import Screen from "@/components/Screen";
-import { colors, spacing, radius } from "@/theme/colors";
-import { chat as sendChat, getChatHistory, getGreeting } from "@/lib/api";
-import { assetUrl } from "@/lib/api";
-import {
-  getRewardsState,
-  getThemes,
-  setChatTheme,
-  sendShare,
-  type ThemeInfo,
-  type BonusInfo,
-} from "@/lib/api";
-import { companionByName } from "@/lib/companions";
-import { getSession } from "@/lib/session";
+import * as SecureStore from "expo-secure-store";
+import { getSession } from "./session";
 
-type Message = {
-  id: string;
-  role: "user" | "assistant";
+export const API_BASE_URL = "https://aurae-backend-fukx.onrender.com";
+
+export function assetUrl(relativePath: string): string {
+  return `${API_BASE_URL}/${relativePath}`;
+}
+
+const STORAGE_KEYS = {
+  deviceId: "aurae_device_id",
+  accessToken: "aurae_access_token",
+  refreshToken: "aurae_refresh_token",
+} as const;
+
+function generateUUID(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export async function getOrCreateDeviceId(): Promise<string> {
+  const existing = await SecureStore.getItemAsync(STORAGE_KEYS.deviceId);
+  if (existing) return existing;
+  const created = generateUUID();
+  await SecureStore.setItemAsync(STORAGE_KEYS.deviceId, created);
+  return created;
+}
+
+async function storeTokens(accessToken: string, refreshToken: string) {
+  await SecureStore.setItemAsync(STORAGE_KEYS.accessToken, accessToken);
+  await SecureStore.setItemAsync(STORAGE_KEYS.refreshToken, refreshToken);
+}
+
+async function getAccessToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(STORAGE_KEYS.accessToken);
+}
+
+async function getRefreshToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(STORAGE_KEYS.refreshToken);
+}
+
+export async function clearAuthTokens(): Promise<void> {
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.accessToken);
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.refreshToken);
+}
+
+export async function isLoggedIn(): Promise<boolean> {
+  return (await getAccessToken()) !== null;
+}
+
+export type SignupResponse = {
+  user_id: number;
+  companion: string;
+  access_token: string;
+  refresh_token: string;
+};
+
+export type StreakInfo = {
+  current_streak: number;
+  longest_streak: number;
+  streak_freezes: number;
+  milestone_hit: number | null;
+};
+
+export type BonusInfo = {
   text: string;
+  reward_points_earned: number;
 };
 
-const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
-const IDLE_SWITCH_MS = 7500;
-const REACTION_HOLD_MS = 7500;
-const TOAST_HOLD_MS = 4000;
-
-function emotionClipPath(companionId: string, emotion: string): string {
-  const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
-  return `assets/${cap}_Assets/${cap}_${emotion}.mp4`;
-}
-
-function emotionFromPath(path: string | null): string {
-  if (!path) return "neutral";
-  const match = path.match(/_(\w+)\.mp4$/);
-  return match ? match[1] : "neutral";
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const sanitized = hex.replace("#", "");
-  const bigint = parseInt(sanitized, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-const EMOTION_GLOW_RGB: Record<string, string> = {
-  neutral: "0, 242, 254",
-  think: "0, 242, 254",
-  smile: "255, 214, 107",
-  joy: "255, 184, 77",
-  blush: "255, 143, 171",
-  pout: "155, 140, 255",
-  wink: "255, 143, 203",
-  question: "140, 217, 255",
+export type ChatResponse = {
+  reply: string;
+  mood?: string;
+  emotion_tag: string;
+  asset_path: string;
+  crisis_flagged: boolean;
+  limit_reached?: boolean;
+  streak?: StreakInfo;
+  bonus?: BonusInfo | null;
 };
 
-export default function ChatScreen() {
-  const { companion: companionName } = useLocalSearchParams<{
-    userId: string;
-    companion: string;
-  }>();
+export type GreetingResponse = {
+  reply: string;
+  emotion_tag: string;
+  asset_path: string;
+};
 
-  const companion = companionByName(companionName ?? "") ?? null;
+export type ChatHistoryItem = {
+  role: "user" | "assistant";
+  content: string;
+};
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [idleIdx, setIdleIdx] = useState(0);
-  const [activeIsA, setActiveIsA] = useState(true);
-  const [reactionPath, setReactionPath] = useState<string | null>(null);
-  const [resumeKey, setResumeKey] = useState(0);
-  const [userName, setUserName] = useState<string | null>(null);
-  const nextId = useRef(0);
-  const greetingTried = useRef(false);
-  const listRef = useRef<FlatList>(null);
+export type ChatHistoryResponse = {
+  messages: ChatHistoryItem[];
+  asset_path: string | null;
+};
 
-  // --- reward sprint 1 state ---
-  const [currentStreak, setCurrentStreak] = useState(0);
-  const [themes, setThemes] = useState<ThemeInfo[]>([]);
-  const [activeThemeId, setActiveThemeId] = useState("default");
-  const [showThemeModal, setShowThemeModal] = useState(false);
-  const [bonusToast, setBonusToast] = useState<BonusInfo | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+export type RewardsState = {
+  current_streak: number;
+  longest_streak: number;
+  streak_freezes: number;
+  reward_points: number;
+  chat_theme: string;
+};
 
-  const activeTheme = themes.find((t) => t.id === activeThemeId);
-  const bgColor = activeTheme?.bg ?? colors.background;
-  const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
+export type ThemeInfo = {
+  id: string;
+  name: string;
+  unlock_streak: number;
+  bg: string;
+  bubble_assistant: string;
+  accent: string | null;
+  unlocked: boolean;
+};
 
-  const breath = useSharedValue(0.4);
-  useEffect(() => {
-    breath.value = withRepeat(
-      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    );
-  }, []);
-  const animatedGlowStyle = useAnimatedStyle(() => ({
-    opacity: breath.value,
-  }));
+export type ThemesResponse = {
+  active_theme: string;
+  themes: ThemeInfo[];
+};
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      StatusBar.setHidden(false, "none");
-      StatusBar.setBarStyle("light-content", true); 
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+export type ShareResponse = {
+  reward_granted: boolean;
+  reward_points: number;
+};
 
-  useEffect(() => {
-    (async () => {
-      const session = await getSession();
-      if (session) setUserName(session.name);
-    })();
-  }, []);
+export async function signup(params: {
+  name: string;
+  ageConfirmed: boolean;
+  genderPreference: string;
+  companionId: string;
+  initialTone: string;
+}): Promise<SignupResponse> {
+  const deviceId = await getOrCreateDeviceId();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [state, themeData] = await Promise.all([getRewardsState(), getThemes()]);
-        setCurrentStreak(state.current_streak);
-        setActiveThemeId(themeData.active_theme);
-        setThemes(themeData.themes);
-      } catch {
-        // 리워드 상태 로딩 실패해도 채팅 자체는 막지 않음
-      }
-    })();
-  }, []);
-
-  function showBonusToast(bonus: BonusInfo) {
-    setBonusToast(bonus);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setBonusToast(null), TOAST_HOLD_MS);
-  }
-
-  async function handleSelectTheme(theme: ThemeInfo) {
-    if (!theme.unlocked) return;
-    try {
-      await setChatTheme(theme.id);
-      setActiveThemeId(theme.id);
-      setShowThemeModal(false);
-    } catch {
-      setError("Couldn't change theme right now.");
-    }
-  }
-
-  async function handleShareBubble(text: string) {
-    try {
-      await Share.share({
-        message: `"${text}"\n\n— ${companion?.name ?? "my Aurae companion"} 💬\n\ntalking to my AI bestie on Aurae`,
-      });
-      await sendShare("chat_bubble");
-    } catch {
-      // 공유 시트 취소/실패는 조용히 무시
-    }
-  }
-
-  const playerA = useVideoPlayer(null, (p) => {
-    p.loop = false;
-  });
-  const playerB = useVideoPlayer(null, (p) => {
-    p.loop = false;
+  const response = await fetch(`${API_BASE_URL}/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: params.name,
+      age_confirmed: params.ageConfirmed,
+      gender_preference: params.genderPreference,
+      companion_id: params.companionId,
+      initial_tone: params.initialTone,
+      device_id: deviceId,
+    }),
   });
 
-  function getActive() {
-    return activeIsA ? playerA : playerB;
-  }
-  function getHidden() {
-    return activeIsA ? playerB : playerA;
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Signup failed (${response.status}): ${body} | sent companionId="${params.companionId}"`);
   }
 
-  useEffect(() => {
-    if (!companion) return;
-    playerA.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[0])));
-    playerA.play();
-    playerB.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[1 % IDLE_EMOTIONS.length])));
-    playerB.pause();
-  }, [companion]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const history = await getChatHistory();
-        if (history.messages.length > 0) {
-          setMessages(
-            history.messages.map((m) => {
-              nextId.current += 1;
-              return {
-                id: String(nextId.current),
-                role: m.role === "user" ? "user" : "assistant",
-                text: m.content,
-              };
-            })
-          );
-          if (history.asset_path) {
-            getActive().replace(assetUrl(history.asset_path));
-            getActive().play();
-            setReactionPath(history.asset_path);
-            setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
-          }
-        } else if (!greetingTried.current) {
-          // 진짜 첫 만남 - 캐릭터가 먼저 인사하게
-          greetingTried.current = true;
-          try {
-            const greeting = await getGreeting();
-            nextId.current += 1;
-            setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
-            getActive().replace(assetUrl(greeting.asset_path));
-            getActive().play();
-            setReactionPath(greeting.asset_path);
-            setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
-          } catch {
-            // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음)
-          }
-        }
-      } catch {
-        // 기록 불러오기 실패해도 빈 화면으로 시작
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (reactionPath || !companion) return;
-    const timer = setTimeout(() => {
-      const nextIdx = (idleIdx + 1) % IDLE_EMOTIONS.length;
-      const bufferedIdx = (idleIdx + 2) % IDLE_EMOTIONS.length;
-
-      const newActiveIsA = !activeIsA;
-      getHidden().play();
-      setActiveIsA(newActiveIsA);
-      setIdleIdx(nextIdx);
-
-      const stale = activeIsA ? playerA : playerB;
-      stale.replace(assetUrl(emotionClipPath(companion.id, IDLE_EMOTIONS[bufferedIdx])));
-      stale.pause();
-    }, IDLE_SWITCH_MS);
-    return () => clearTimeout(timer);
-  }, [idleIdx, activeIsA, reactionPath, companion]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        getActive().play();
-        setResumeKey((k) => k + 1);
-      }
-    });
-    return () => subscription.remove();
-  });
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-    return () => clearTimeout(timeout);
-  }, [messages]);
-
-  function addMessage(role: "user" | "assistant", text: string) {
-    nextId.current += 1;
-    setMessages((prev) => [...prev, { id: String(nextId.current), role, text }]);
-  }
-
-  async function handleSend() {
-    const text = input.trim();
-    if (!text || sending) return;
-
-    setInput("");
-    setError(null);
-    addMessage("user", text);
-    setSending(true);
-
-    try {
-      const result = await sendChat({ message: text });
-      addMessage("assistant", result.reply);
-      getActive().replace(assetUrl(result.asset_path));
-      getActive().play();
-      setReactionPath(result.asset_path);
-      setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
-
-      if (result.streak) {
-        setCurrentStreak(result.streak.current_streak);
-      }
-      if (result.bonus) {
-        showBonusToast(result.bonus);
-      }
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setError(`Message didn't go through. (${detail})`);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  const currentEmotion = reactionPath ? emotionFromPath(reactionPath) : IDLE_EMOTIONS[idleIdx];
-  const glowRgb = EMOTION_GLOW_RGB[currentEmotion] || EMOTION_GLOW_RGB["neutral"];
-  const hasGlow = Boolean(glowRgb);
-  const glowColor = `rgb(${glowRgb})`;
-
-  return (
-    <Screen style={[styles.container, { backgroundColor: bgColor }]}>
-      <KeyboardAvoidingView
-        style={styles.flexFill}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
-      >
-        {bonusToast && (
-          <View style={styles.toastWrap} pointerEvents="none">
-            <View style={styles.toast}>
-              <Text style={styles.toastText}>{bonusToast.text}</Text>
-              <Text style={styles.toastPoints}>+{bonusToast.reward_points_earned} pts</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.header}>
-          <View style={styles.avatarStack}>
-            <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
-              <Svg width={104} height={104} viewBox="0 0 104 104">
-                <Defs>
-                  <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
-                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
-                    <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
-                    <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
-                  </RadialGradient>
-                </Defs>
-                <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
-              </Svg>
-            </Animated.View>
-
-            <View style={styles.avatarWrap}>
-              <VideoView
-                key={`a-${resumeKey}`}
-                player={playerA}
-                style={[styles.avatarMedia, { opacity: activeIsA ? 1 : 0 }]}
-                contentFit="cover"
-                nativeControls={false}
-              />
-              <VideoView
-                key={`b-${resumeKey}`}
-                player={playerB}
-                style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
-                contentFit="cover"
-                nativeControls={false}
-              />
-              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
-                <Defs>
-                  <Mask id="avatarCircleMask">
-                    <Rect x="0" y="0" width="72" height="72" fill="white" />
-                    <Circle cx="36" cy="36" r="34" fill="black" />
-                  </Mask>
-                </Defs>
-                <Rect
-                  x="0"
-                  y="0"
-                  width="72"
-                  height="72"
-                  fill={colors.background}
-                  mask="url(#avatarCircleMask)"
-                />
-              </Svg>
-            </View>
-          </View>
-
-          <View style={styles.headerText}>
-            <Text style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}>
-              {companion?.name ?? companionName ?? "Your soul friend"}
-            </Text>
-          </View>
-
-          {currentStreak > 0 && (
-            <View style={styles.streakBadge}>
-              <Text style={styles.streakText}>🔥 {currentStreak}</Text>
-            </View>
-          )}
-
-          <Pressable onPress={() => setShowThemeModal(true)} style={styles.themeButton}>
-            <Text style={styles.themeButtonText}>🎨</Text>
-          </Pressable>
-
-          {userName && <Text style={styles.userName}>{userName}</Text>}
-        </View>
-
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messages}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-          renderItem={({ item }) => (
-            <Pressable
-              onLongPress={() => handleShareBubble(item.text)}
-              style={[
-                styles.bubble,
-                item.role === "user"
-                  ? [
-                      styles.bubbleUser,
-                      companion?.accent && { backgroundColor: hexToRgba(companion.accent, 0.22) },
-                    ]
-                  : [styles.bubbleAssistant, { backgroundColor: assistantBubbleColor }],
-              ]}
-            >
-              <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
-                {item.text}
-              </Text>
-            </Pressable>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
-          }
-        />
-
-        {error && <Text style={styles.error}>{error}</Text>}
-
-        <View style={styles.inputRow}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="say something"
-            placeholderTextColor={colors.textTertiary}
-            style={[
-              styles.input,
-              companion?.accent && { borderColor: hexToRgba(companion.accent, 0.5) },
-            ]}
-            editable={!sending}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-          />
-          {sending ? (
-            <ActivityIndicator color={companion?.accent ?? colors.accent} style={styles.sendButton} />
-          ) : (
-            <Pressable onPress={handleSend} style={styles.sendButton}>
-              <Text style={[styles.sendText, { color: companion?.accent ?? colors.accent }]}>Send</Text>
-            </Pressable>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-
-      <Modal visible={showThemeModal} transparent animationType="fade">
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowThemeModal(false)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Chat Theme</Text>
-            {themes.map((theme) => (
-              <Pressable
-                key={theme.id}
-                onPress={() => handleSelectTheme(theme)}
-                style={[
-                  styles.themeRow,
-                  theme.id === activeThemeId && styles.themeRowActive,
-                  !theme.unlocked && styles.themeRowLocked,
-                ]}
-              >
-                <View style={[styles.themeSwatch, { backgroundColor: theme.bg }]} />
-                <Text style={[styles.themeRowText, !theme.unlocked && styles.themeRowTextLocked]}>
-                  {theme.name}
-                </Text>
-                {!theme.unlocked && (
-                  <Text style={styles.themeLockNote}>🔒 Day {theme.unlock_streak}</Text>
-                )}
-                {theme.id === activeThemeId && <Text style={styles.themeCheck}>✓</Text>}
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
-    </Screen>
-  );
+  const data: SignupResponse = await response.json();
+  await storeTokens(data.access_token, data.refresh_token);
+  return data;
 }
 
-const styles = StyleSheet.create({
-  flexFill: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingLeft: spacing.xs,
-    paddingRight: spacing.lg,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  avatarStack: {
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glowSvgWrap: {
-    position: "absolute",
-    width: 104,
-    height: 104,
-  },
-  avatarWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    overflow: "hidden",
-    backgroundColor: colors.surface,
-  },
-  avatarMedia: {
-    width: "100%",
-    height: "100%",
-  },
-  headerText: {
-    flex: 1,
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  userName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: colors.textSecondary,
-  },
-  streakBadge: {
-    backgroundColor: "rgba(255, 184, 77, 0.18)",
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  streakText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFB84D",
-  },
-  themeButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
-  themeButtonText: {
-    fontSize: 18,
-  },
-  toastWrap: {
-    position: "absolute",
-    top: 8,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 50,
-  },
-  toast: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    maxWidth: "85%",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 184, 77, 0.4)",
-  },
-  toastText: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  toastPoints: {
-    color: "#FFB84D",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  messages: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-    flexGrow: 1,
-  },
-  emptyState: {
-    fontSize: 13,
-    color: colors.textTertiary,
-    textAlign: "center",
-    marginTop: spacing.xl,
-  },
-  bubble: {
-    maxWidth: "80%",
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-  },
-  bubbleUser: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.accent,
-  },
-  bubbleAssistant: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.surface,
-  },
-  bubbleTextUser: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  bubbleTextAssistant: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  error: {
-    fontSize: 12,
-    color: colors.warning,
-    textAlign: "center",
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.textPrimary,
-    backgroundColor: colors.surface,
-    fontSize: 15,
-  },
-  sendButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  sendText: {
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalCard: {
-    width: "85%",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-  },
-  modalTitle: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
-  },
-  themeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  themeRowActive: {
-    opacity: 1,
-  },
-  themeRowLocked: {
-    opacity: 0.45,
-  },
-  themeSwatch: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  themeRowText: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-  themeRowTextLocked: {
-    color: colors.textTertiary,
-  },
-  themeLockNote: {
-    fontSize: 11,
-    color: colors.textTertiary,
-  },
-  themeCheck: {
-    color: colors.accent,
-    fontWeight: "700",
-  },
-});
+async function refreshAccessToken(): Promise<string> {
+  const session = await getSession();
+  const refreshToken = await getRefreshToken();
+  const deviceId = await getOrCreateDeviceId();
+
+  if (!session || !refreshToken) {
+    throw new Error("No session to refresh. Please log in again.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: session.userId,
+      refresh_token: refreshToken,
+      device_id: deviceId,
+    }),
+  });
+
+  if (!response.ok) {
+    await clearAuthTokens();
+    const body = await response.text();
+    throw new Error(`Refresh failed (${response.status}): ${body}`);
+  }
+
+  const data: { access_token: string; refresh_token: string } = await response.json();
+  await storeTokens(data.access_token, data.refresh_token);
+  return data.access_token;
+}
+
+async function authorizedFetch(path: string, init: RequestInit): Promise<Response> {
+  let token = await getAccessToken();
+  if (!token) {
+    throw new Error("Not logged in.");
+  }
+
+  const withAuth = (t: string): RequestInit => ({
+    ...init,
+    headers: { ...(init.headers || {}), Authorization: `Bearer ${t}` },
+  });
+
+  let response = await fetch(`${API_BASE_URL}${path}`, withAuth(token));
+
+  if (response.status === 401) {
+    token = await refreshAccessToken();
+    response = await fetch(`${API_BASE_URL}${path}`, withAuth(token));
+  }
+
+  return response;
+}
+
+export async function chat(params: { message: string }): Promise<ChatResponse> {
+  const response = await authorizedFetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: params.message }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Chat failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function getChatHistory(): Promise<ChatHistoryResponse> {
+  const response = await authorizedFetch("/chat/history", { method: "GET" });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Chat history failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function getGreeting(): Promise<GreetingResponse> {
+  const response = await authorizedFetch("/chat/greeting", { method: "POST" });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Greeting failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function getRewardsState(): Promise<RewardsState> {
+  const response = await authorizedFetch("/rewards/state", { method: "GET" });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Rewards state failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function getThemes(): Promise<ThemesResponse> {
+  const response = await authorizedFetch("/rewards/themes", { method: "GET" });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Themes failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function setChatTheme(themeId: string): Promise<{ active_theme: string }> {
+  const response = await authorizedFetch("/rewards/theme", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ theme_id: themeId }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Set theme failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function sendShare(momentType: string): Promise<ShareResponse> {
+  const response = await authorizedFetch("/rewards/share", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ moment_type: momentType }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Share failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}

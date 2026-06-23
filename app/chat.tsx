@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   AppState,
   StatusBar,
+  Share,
+  Modal,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -26,6 +28,14 @@ import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
 import { chat as sendChat, getChatHistory, getGreeting } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
+import {
+  getRewardsState,
+  getThemes,
+  setChatTheme,
+  sendShare,
+  type ThemeInfo,
+  type BonusInfo,
+} from "@/lib/api";
 import { companionByName } from "@/lib/companions";
 import { getSession } from "@/lib/session";
 
@@ -38,6 +48,7 @@ type Message = {
 const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
 const IDLE_SWITCH_MS = 7500;
 const REACTION_HOLD_MS = 7500;
+const TOAST_HOLD_MS = 4000;
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -91,6 +102,18 @@ export default function ChatScreen() {
   const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
 
+  // --- reward sprint 1 state ---
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [themes, setThemes] = useState<ThemeInfo[]>([]);
+  const [activeThemeId, setActiveThemeId] = useState("default");
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [bonusToast, setBonusToast] = useState<BonusInfo | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const activeTheme = themes.find((t) => t.id === activeThemeId);
+  const bgColor = activeTheme?.bg ?? colors.background;
+  const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
+
   const breath = useSharedValue(0.4);
   useEffect(() => {
     breath.value = withRepeat(
@@ -117,6 +140,47 @@ export default function ChatScreen() {
       if (session) setUserName(session.name);
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [state, themeData] = await Promise.all([getRewardsState(), getThemes()]);
+        setCurrentStreak(state.current_streak);
+        setActiveThemeId(themeData.active_theme);
+        setThemes(themeData.themes);
+      } catch {
+        // 리워드 상태 로딩 실패해도 채팅 자체는 막지 않음
+      }
+    })();
+  }, []);
+
+  function showBonusToast(bonus: BonusInfo) {
+    setBonusToast(bonus);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setBonusToast(null), TOAST_HOLD_MS);
+  }
+
+  async function handleSelectTheme(theme: ThemeInfo) {
+    if (!theme.unlocked) return;
+    try {
+      await setChatTheme(theme.id);
+      setActiveThemeId(theme.id);
+      setShowThemeModal(false);
+    } catch {
+      setError("Couldn't change theme right now.");
+    }
+  }
+
+  async function handleShareBubble(text: string) {
+    try {
+      await Share.share({
+        message: `"${text}"\n\n— ${companion?.name ?? "my Aurae companion"} 💬\n\ntalking to my AI bestie on Aurae`,
+      });
+      await sendShare("chat_bubble");
+    } catch {
+      // 공유 시트 취소/실패는 조용히 무시
+    }
+  }
 
   const playerA = useVideoPlayer(null, (p) => {
     p.loop = false;
@@ -238,6 +302,13 @@ export default function ChatScreen() {
       getActive().play();
       setReactionPath(result.asset_path);
       setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
+
+      if (result.streak) {
+        setCurrentStreak(result.streak.current_streak);
+      }
+      if (result.bonus) {
+        showBonusToast(result.bonus);
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -252,12 +323,21 @@ export default function ChatScreen() {
   const glowColor = `rgb(${glowRgb})`;
 
   return (
-    <Screen style={styles.container}>
+    <Screen style={[styles.container, { backgroundColor: bgColor }]}>
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
+        {bonusToast && (
+          <View style={styles.toastWrap} pointerEvents="none">
+            <View style={styles.toast}>
+              <Text style={styles.toastText}>{bonusToast.text}</Text>
+              <Text style={styles.toastPoints}>+{bonusToast.reward_points_earned} pts</Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.header}>
           <View style={styles.avatarStack}>
             <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
@@ -313,6 +393,16 @@ export default function ChatScreen() {
             </Text>
           </View>
 
+          {currentStreak > 0 && (
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakText}>🔥 {currentStreak}</Text>
+            </View>
+          )}
+
+          <Pressable onPress={() => setShowThemeModal(true)} style={styles.themeButton}>
+            <Text style={styles.themeButtonText}>🎨</Text>
+          </Pressable>
+
           {userName && <Text style={styles.userName}>{userName}</Text>}
         </View>
 
@@ -323,7 +413,8 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messages}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (
-            <View
+            <Pressable
+              onLongPress={() => handleShareBubble(item.text)}
               style={[
                 styles.bubble,
                 item.role === "user"
@@ -331,13 +422,13 @@ export default function ChatScreen() {
                       styles.bubbleUser,
                       companion?.accent && { backgroundColor: hexToRgba(companion.accent, 0.22) },
                     ]
-                  : styles.bubbleAssistant,
+                  : [styles.bubbleAssistant, { backgroundColor: assistantBubbleColor }],
               ]}
             >
               <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
                 {item.text}
               </Text>
-            </View>
+            </Pressable>
           )}
           ListEmptyComponent={
             <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
@@ -369,6 +460,34 @@ export default function ChatScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      <Modal visible={showThemeModal} transparent animationType="fade">
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowThemeModal(false)}>
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Chat Theme</Text>
+            {themes.map((theme) => (
+              <Pressable
+                key={theme.id}
+                onPress={() => handleSelectTheme(theme)}
+                style={[
+                  styles.themeRow,
+                  theme.id === activeThemeId && styles.themeRowActive,
+                  !theme.unlocked && styles.themeRowLocked,
+                ]}
+              >
+                <View style={[styles.themeSwatch, { backgroundColor: theme.bg }]} />
+                <Text style={[styles.themeRowText, !theme.unlocked && styles.themeRowTextLocked]}>
+                  {theme.name}
+                </Text>
+                {!theme.unlocked && (
+                  <Text style={styles.themeLockNote}>🔒 Day {theme.unlock_streak}</Text>
+                )}
+                {theme.id === activeThemeId && <Text style={styles.themeCheck}>✓</Text>}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -425,6 +544,53 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: colors.textSecondary,
+  },
+  streakBadge: {
+    backgroundColor: "rgba(255, 184, 77, 0.18)",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  streakText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFB84D",
+  },
+  themeButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  themeButtonText: {
+    fontSize: 18,
+  },
+  toastWrap: {
+    position: "absolute",
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 50,
+  },
+  toast: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    maxWidth: "85%",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 184, 77, 0.4)",
+  },
+  toastText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  toastPoints: {
+    color: "#FFB84D",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
   },
   messages: {
     paddingHorizontal: spacing.lg,
@@ -496,5 +662,60 @@ const styles = StyleSheet.create({
   sendText: {
     fontWeight: "700",
     fontSize: 15,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCard: {
+    width: "85%",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+  },
+  modalTitle: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: spacing.sm,
+  },
+  themeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  themeRowActive: {
+    opacity: 1,
+  },
+  themeRowLocked: {
+    opacity: 0.45,
+  },
+  themeSwatch: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  themeRowText: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 14,
+  },
+  themeRowTextLocked: {
+    color: colors.textTertiary,
+  },
+  themeLockNote: {
+    fontSize: 11,
+    color: colors.textTertiary,
+  },
+  themeCheck: {
+    color: colors.accent,
+    fontWeight: "700",
   },
 });
