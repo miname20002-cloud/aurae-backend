@@ -5,6 +5,14 @@ share logging, and unlockable chat themes.
 Streak math and the surprise-bonus roll are both gated to run at most
 once per calendar day per user, so calling /chat multiple times in the
 same day never double-grants a milestone or stacks multiple surprises.
+
+Design note: "milestone_hit" fires on ANY day worth celebrating - that
+includes both point-reward days (MILESTONE_REWARDS) and theme-unlock
+days (THEMES). These two sets don't have to overlap; a day can unlock
+a theme without granting bonus points (e.g. day 3, day 14), or grant
+points without unlocking a theme (e.g. day 30, day 100). Day 7 happens
+to do both. The frontend only needs to know "something worth telling
+the user happened today", not which kind.
 """
 import os
 import random
@@ -41,6 +49,8 @@ THEMES = {
     "blush":   {"name": "Blush Dream",  "unlock_streak": 14, "bg": "#1A1014", "bubble_assistant": "#2E1A22", "accent": "#FF8FAB"},
 }
 
+THEME_UNLOCK_DAYS = {t["unlock_streak"] for t in THEMES.values() if t["unlock_streak"] > 0}
+
 
 def update_streak(session, user: User) -> dict:
     """Safe to call on every /chat turn - the actual update only happens once per day."""
@@ -63,10 +73,14 @@ def update_streak(session, user: User) -> dict:
         user.last_active_date = today_str
         user.longest_streak = max(user.longest_streak, user.current_streak)
 
+        is_celebration_day = user.current_streak in MILESTONE_REWARDS or user.current_streak in THEME_UNLOCK_DAYS
+
         if user.current_streak in MILESTONE_REWARDS:
             user.reward_points += MILESTONE_REWARDS[user.current_streak]
             if user.current_streak == 7:
                 user.streak_freezes += 1
+
+        if is_celebration_day:
             milestone_hit = user.current_streak
 
         session.commit()
