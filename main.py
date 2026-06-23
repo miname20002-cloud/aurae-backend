@@ -117,19 +117,16 @@ def debug_db_info():
 
 @app.post("/signup")
 def signup(req: SignupRequest):
-    if not req.age_confirmed:
-        raise HTTPException(status_code=403, detail="Age confirmation (18+) is required to use Aurae.")
-    if req.companion_id not in PERSONAS:
-        raise HTTPException(status_code=400, detail="Unknown companion_id.")
-    if PERSONAS[req.companion_id]["gender"] != req.gender_preference:
-        raise HTTPException(status_code=400, detail="companion_id does not match gender_preference.")
-
     session = get_session(engine)
 
     # This device already has an account - reconnect to it instead of creating
-    # a duplicate. Without this check, re-running onboarding on the same device
-    # (intentionally or by accident) would silently fragment a user's streak/
-    # chat history/relationship_level across orphaned rows.
+    # a duplicate, and skip all the fresh-signup validation below entirely
+    # (age/companion/gender don't matter for a reconnect - we only need
+    # device_id to find the existing row). This check runs FIRST, before any
+    # validation, specifically so the frontend's silent auto-recovery flow
+    # (re-establishing a session after a wiped token, with placeholder
+    # values for fields it doesn't have cached) can never get rejected by
+    # validation meant for brand-new signups.
     existing_user = session.query(User).filter(User.device_id == req.device_id).first()
     if existing_user:
         refresh_token = auth.generate_refresh_token()
@@ -145,6 +142,13 @@ def signup(req: SignupRequest):
             "refresh_token": refresh_token,
             "existing_account": True,
         }
+
+    if not req.age_confirmed:
+        raise HTTPException(status_code=403, detail="Age confirmation (18+) is required to use Aurae.")
+    if req.companion_id not in PERSONAS:
+        raise HTTPException(status_code=400, detail="Unknown companion_id.")
+    if PERSONAS[req.companion_id]["gender"] != req.gender_preference:
+        raise HTTPException(status_code=400, detail="companion_id does not match gender_preference.")
 
     user = User(name=req.name, age_verified=True, companion_id=req.companion_id)
     session.add(user)

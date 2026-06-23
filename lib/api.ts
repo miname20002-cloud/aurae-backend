@@ -204,11 +204,49 @@ async function refreshAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-async function authorizedFetch(path: string, init: RequestInit): Promise<Response> {
-  let token = await getAccessToken();
-  if (!token) {
+/**
+ * Resolves to a usable access token, recovering from a wiped/missing token
+ * where possible instead of just failing:
+ * 1. Use the stored access token if present.
+ * 2. Otherwise try the refresh token, if one is still stored.
+ * 3. Otherwise, if we still have a cached session (name/companion) and a
+ *    device_id, silently re-establish the session via /signup's
+ *    existing-account reconnect path - this is the same device, so the
+ *    backend recognizes it and returns a fresh token pair without creating
+ *    a duplicate account or losing any history.
+ * Only throws "Not logged in" if none of the above are available at all
+ * (e.g. truly first-ever launch, before onboarding).
+ */
+async function ensureValidToken(): Promise<string> {
+  const existing = await getAccessToken();
+  if (existing) return existing;
+
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) {
+    try {
+      return await refreshAccessToken();
+    } catch {
+      // fall through to full reconnect below
+    }
+  }
+
+  const session = await getSession();
+  if (!session) {
     throw new Error("Not logged in.");
   }
+
+  const reconnected = await signup({
+    name: session.name,
+    ageConfirmed: true,
+    genderPreference: "female",
+    companionId: session.companion.toLowerCase(),
+    initialTone: "unknown",
+  });
+  return reconnected.access_token;
+}
+
+async function authorizedFetch(path: string, init: RequestInit): Promise<Response> {
+  let token = await ensureValidToken();
 
   const withAuth = (t: string): RequestInit => ({
     ...init,
