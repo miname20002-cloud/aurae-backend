@@ -58,7 +58,7 @@ const MILESTONE_TOAST_HOLD_MS = 5000;
 const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
-const INTRO_FALLBACK_MS = 20000;
+const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -433,25 +433,18 @@ export default function ChatScreen() {
             triggerIntroFlash();
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-            const activePlayer = getActive();
-            let revealed = false;
-            let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-            const revealGreeting = () => {
-              if (revealed) return;
-              revealed = true;
-              if (fallbackTimer) clearTimeout(fallbackTimer);
-              subscription.remove();
+            // expo-video의 "재생 끝남" 이벤트에 의존하지 않고, 인트로
+            // 영상이 정확히 10초로 만들어졌다는 걸 알고 있으니 그 시간만큼
+            // 타이머로 직접 기다린다 - 이벤트 유무/버전 차이에 좌우되지 않는
+            // 가장 확실한 방법.
+            setTimeout(() => {
               triggerSparkleBurst();
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               nextId.current += 1;
               setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
               setReactionPath(null);
               setInitializing(false);
-            };
-            const subscription = activePlayer.addListener("playToEnd", revealGreeting);
-            // 영상 이벤트가 어떤 이유로든 안 터질 경우를 대비한 안전장치 -
-            // 화면이 영원히 안 풀리는 것보단 늦게라도 메시지가 뜨는 게 낫다.
-            fallbackTimer = setTimeout(revealGreeting, INTRO_FALLBACK_MS);
+            }, INTRO_VIDEO_DURATION_MS);
           } catch {
             // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음)
             setInitializing(false);
@@ -614,6 +607,18 @@ export default function ChatScreen() {
                 </Svg>
               </Animated.View>
 
+              <Animated.View style={[styles.introFlash, introFlashStyle]} pointerEvents="none" />
+              <View style={styles.sparkleLayer} pointerEvents="none">
+                {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+                  <Sparkle
+                    key={i}
+                    progress={sparkleProgress}
+                    angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+                    color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+                  />
+                ))}
+              </View>
+
               <View style={styles.avatarWrap}>
                 <VideoView
                   key={`a-${resumeKey}`}
@@ -645,18 +650,6 @@ export default function ChatScreen() {
                     mask="url(#avatarCircleMask)"
                   />
                 </Svg>
-              </View>
-
-              <Animated.View style={[styles.introFlash, introFlashStyle]} pointerEvents="none" />
-              <View style={styles.sparkleLayer} pointerEvents="none">
-                {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
-                  <Sparkle
-                    key={i}
-                    progress={sparkleProgress}
-                    angle={(i / SPARKLE_COUNT) * Math.PI * 2}
-                    color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
-                  />
-                ))}
               </View>
             </View>
             <Text
