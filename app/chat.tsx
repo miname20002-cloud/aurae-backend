@@ -394,7 +394,7 @@ export default function ChatScreen() {
   const glowColor = `rgb(${glowRgb})`;
 
   return (
-    <Screen style={[styles.container, { backgroundColor: bgColor }]}>
+    <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
