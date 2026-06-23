@@ -594,29 +594,30 @@ export default function ChatScreen() {
 
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
-      {showIntroOverlay && (
-        <View style={styles.introOverlay}>
-          <VideoView
-            player={introPlayer}
-            style={styles.introOverlayVideo}
-            contentFit="cover"
-            nativeControls={false}
-          />
-          <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
-          <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
-            {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
-              <Sparkle
-                key={i}
-                progress={sparkleProgress}
-                angle={(i / SPARKLE_COUNT) * Math.PI * 2}
-                color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
-                radius={140}
-                size={14}
-              />
-            ))}
-          </View>
+      <View
+        style={[styles.introOverlay, { opacity: showIntroOverlay ? 1 : 0 }]}
+        pointerEvents={showIntroOverlay ? "auto" : "none"}
+      >
+        <VideoView
+          player={introPlayer}
+          style={styles.introOverlayVideo}
+          contentFit="cover"
+          nativeControls={false}
+        />
+        <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
+        <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
+          {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+            <Sparkle
+              key={i}
+              progress={sparkleProgress}
+              angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+              color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+              radius={140}
+              size={14}
+            />
+          ))}
         </View>
-      )}
+      </View>
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
