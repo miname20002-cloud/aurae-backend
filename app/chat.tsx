@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: spacing.lg,
+    paddingTop: 40,
   },
   avatarStack: {
     width: 104,
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   },
   toastWrap: {
     position: "absolute",
-    top: 260,
+    top: 162,
     left: 0,
     right: 0,
     alignItems: "center",
