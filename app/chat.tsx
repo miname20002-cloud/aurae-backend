@@ -490,9 +490,8 @@ export default function ChatScreen() {
               if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
               if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
 
-              // 영상 위에서 스파클이 잠깐 보이고, 그 다음 오버레이가 부드럽게
-              // 페이드아웃되면서 이미 준비된 메시지가 자연스럽게 드러난다.
-              triggerSparkleBurst();
+              // 진동으로만 "끝났다"는 신호를 주고, 시각 효과(스파클)는
+              // 안 보인다는 피드백을 받아서 제거함.
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               setTimeout(() => {
                 introOverlayOpacity.value = withTiming(0, {
