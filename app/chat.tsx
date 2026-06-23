@@ -24,6 +24,8 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
 import { chat as sendChat, getChatHistory, getGreeting } from "@/lib/api";
@@ -49,6 +51,8 @@ const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
 const IDLE_SWITCH_MS = 7500;
 const REACTION_HOLD_MS = 7500;
 const TOAST_HOLD_MS = 4000;
+const MILESTONE_TOAST_HOLD_MS = 5000;
+const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -68,6 +72,10 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function computeUnseenCount(themesList: ThemeInfo[], seenStreak: number): number {
+  return themesList.filter((t) => t.unlocked && t.unlock_streak > seenStreak).length;
 }
 
 const EMOTION_GLOW_RGB: Record<string, string> = {
@@ -110,6 +118,13 @@ export default function ChatScreen() {
   const [bonusToast, setBonusToast] = useState<BonusInfo | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // --- theme unlock discoverability (badge + pulse + haptic + toast) ---
+  const [seenThemeStreak, setSeenThemeStreak] = useState(0);
+  const [unseenThemeCount, setUnseenThemeCount] = useState(0);
+  const [milestoneToast, setMilestoneToast] = useState<{ streakDay: number; themeName: string | null } | null>(null);
+  const milestoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const paletteScale = useSharedValue(1);
+
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
@@ -124,6 +139,21 @@ export default function ChatScreen() {
   }, []);
   const animatedGlowStyle = useAnimatedStyle(() => ({
     opacity: breath.value,
+  }));
+
+  useEffect(() => {
+    if (unseenThemeCount > 0) {
+      paletteScale.value = withRepeat(
+        withTiming(1.3, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    } else {
+      paletteScale.value = withTiming(1, { duration: 200 });
+    }
+  }, [unseenThemeCount]);
+  const paletteAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: paletteScale.value }],
   }));
 
   useEffect(() => {
@@ -148,6 +178,11 @@ export default function ChatScreen() {
         setCurrentStreak(state.current_streak);
         setActiveThemeId(themeData.active_theme);
         setThemes(themeData.themes);
+
+        const seenRaw = await AsyncStorage.getItem(THEME_UNLOCK_SEEN_KEY);
+        const seenStreak = seenRaw ? parseInt(seenRaw, 10) : 0;
+        setSeenThemeStreak(seenStreak);
+        setUnseenThemeCount(computeUnseenCount(themeData.themes, seenStreak));
       } catch {
         // 리워드 상태 로딩 실패해도 채팅 자체는 막지 않음
       }
@@ -158,6 +193,23 @@ export default function ChatScreen() {
     setBonusToast(bonus);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setBonusToast(null), TOAST_HOLD_MS);
+  }
+
+  function showMilestoneToast(streakDay: number, unlockedThemes: ThemeInfo[]) {
+    const matched = unlockedThemes.find((t) => t.unlock_streak === streakDay);
+    setMilestoneToast({ streakDay, themeName: matched?.name ?? null });
+    if (milestoneTimer.current) clearTimeout(milestoneTimer.current);
+    milestoneTimer.current = setTimeout(() => setMilestoneToast(null), MILESTONE_TOAST_HOLD_MS);
+  }
+
+  async function handleOpenThemeModal() {
+    setShowThemeModal(true);
+    if (unseenThemeCount > 0) {
+      const maxUnlocked = themes.reduce((max, t) => (t.unlocked ? Math.max(max, t.unlock_streak) : max), 0);
+      setSeenThemeStreak(maxUnlocked);
+      setUnseenThemeCount(0);
+      AsyncStorage.setItem(THEME_UNLOCK_SEEN_KEY, String(maxUnlocked)).catch(() => {});
+    }
   }
 
   async function handleSelectTheme(theme: ThemeInfo) {
@@ -305,6 +357,19 @@ export default function ChatScreen() {
 
       if (result.streak) {
         setCurrentStreak(result.streak.current_streak);
+
+        if (result.streak.milestone_hit) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          try {
+            const updated = await getThemes();
+            setThemes(updated.themes);
+            setActiveThemeId(updated.active_theme);
+            setUnseenThemeCount(computeUnseenCount(updated.themes, seenThemeStreak));
+            showMilestoneToast(result.streak.milestone_hit, updated.themes);
+          } catch {
+            showMilestoneToast(result.streak.milestone_hit, themes);
+          }
+        }
       }
       if (result.bonus) {
         showBonusToast(result.bonus);
@@ -329,11 +394,23 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
-        {bonusToast && (
+        {(milestoneToast || bonusToast) && (
           <View style={styles.toastWrap} pointerEvents="none">
             <View style={styles.toast}>
-              <Text style={styles.toastText}>{bonusToast.text}</Text>
-              <Text style={styles.toastPoints}>+{bonusToast.reward_points_earned} pts</Text>
+              {milestoneToast ? (
+                <>
+                  <Text style={styles.toastText}>
+                    🎉 Day {milestoneToast.streakDay} streak!
+                    {milestoneToast.themeName ? ` "${milestoneToast.themeName}" theme unlocked` : ""}
+                  </Text>
+                  <Text style={styles.toastPoints}>tap 🎨 to try it</Text>
+                </>
+              ) : bonusToast ? (
+                <>
+                  <Text style={styles.toastText}>{bonusToast.text}</Text>
+                  <Text style={styles.toastPoints}>+{bonusToast.reward_points_earned} pts</Text>
+                </>
+              ) : null}
             </View>
           </View>
         )}
@@ -399,8 +476,15 @@ export default function ChatScreen() {
             </View>
           )}
 
-          <Pressable onPress={() => setShowThemeModal(true)} style={styles.themeButton}>
-            <Text style={styles.themeButtonText}>🎨</Text>
+          <Pressable onPress={handleOpenThemeModal} style={styles.themeButton}>
+            <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
+              <Text style={styles.themeButtonText}>🎨</Text>
+            </Animated.View>
+            {unseenThemeCount > 0 && (
+              <View style={styles.themeBadgeDot}>
+                <Text style={styles.themeBadgeText}>{unseenThemeCount}</Text>
+              </View>
+            )}
           </Pressable>
 
           {userName && <Text style={styles.userName}>{userName}</Text>}
@@ -559,9 +643,27 @@ const styles = StyleSheet.create({
   themeButton: {
     paddingHorizontal: 6,
     paddingVertical: 4,
+    position: "relative",
   },
   themeButtonText: {
     fontSize: 18,
+  },
+  themeBadgeDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: "#FF5C5C",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  themeBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
   },
   toastWrap: {
     position: "absolute",
