@@ -59,6 +59,7 @@ const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
+const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -147,10 +148,22 @@ const SPARKLE_COLORS = ["#FFD76B", "#FF8FAB", "#8CD9FF", "#FFE9B0"];
 const SPARKLE_COUNT = 8;
 const SPARKLE_RADIUS = 64;
 
-function Sparkle({ progress, angle, color }: { progress: SharedValue<number>; angle: number; color: string }) {
-  const style = useAnimatedStyle(() => {
+function Sparkle({
+  progress,
+  angle,
+  color,
+  radius = SPARKLE_RADIUS,
+  size = 8,
+}: {
+  progress: SharedValue<number>;
+  angle: number;
+  color: string;
+  radius?: number;
+  size?: number;
+}) {
+  const animatedStyle = useAnimatedStyle(() => {
     const p = progress.value;
-    const dist = p * SPARKLE_RADIUS;
+    const dist = p * radius;
     const opacity = p < 0.12 ? p / 0.12 : Math.max(0, 1 - (p - 0.12) / 0.88);
     return {
       opacity,
@@ -161,7 +174,23 @@ function Sparkle({ progress, angle, color }: { progress: SharedValue<number>; an
       ],
     };
   });
-  return <Animated.View style={[styles.sparkle, style, { backgroundColor: color }]} pointerEvents="none" />;
+  return (
+    <Animated.View
+      style={[
+        styles.sparkle,
+        animatedStyle,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          marginLeft: -size / 2,
+          marginTop: -size / 2,
+          backgroundColor: color,
+        },
+      ]}
+      pointerEvents="none"
+    />
+  );
 }
 
 export default function ChatScreen() {
@@ -183,6 +212,7 @@ export default function ChatScreen() {
   const [userName, setUserName] = useState<string | null>(null);
   const [userPhotoUri, setUserPhotoUri] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [showIntroOverlay, setShowIntroOverlay] = useState(false);
   const nextId = useRef(0);
   const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
@@ -374,6 +404,9 @@ export default function ChatScreen() {
   const playerB = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
+  const introPlayer = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
 
   function getActive() {
     return activeIsA ? playerA : playerB;
@@ -424,12 +457,11 @@ export default function ChatScreen() {
             if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
 
             // 인사 영상(Chloe_intro.mp4 등)은 시선을 집중시키는 한 번뿐인
-            // 연출이라, 영상이 끝날 때까지 메시지 말풍선과 입력창을 같이
-            // 묻어둔다 - 영상 보여주는 동안 텍스트가 같이 떠서 산만해지지
-            // 않게.
-            getActive().replace(assetUrl(greeting.asset_path));
-            getActive().play();
-            setReactionPath(greeting.asset_path);
+            // 연출이라, 작은 아바타가 아니라 채팅창 전체를 덮는 오버레이로
+            // 보여준다. 끝날 때까지 메시지 말풍선과 입력창도 같이 묻어둔다.
+            introPlayer.replace(assetUrl(greeting.asset_path));
+            introPlayer.play();
+            setShowIntroOverlay(true);
             triggerIntroFlash();
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
@@ -440,10 +472,14 @@ export default function ChatScreen() {
             setTimeout(() => {
               triggerSparkleBurst();
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-              nextId.current += 1;
-              setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
-              setReactionPath(null);
-              setInitializing(false);
+              // 스파클이 영상 위에서 잠깐 보인 다음에 오버레이를 내리고
+              // 채팅 화면(이미 작은 아바타는 평소 idle 상태)을 드러낸다.
+              setTimeout(() => {
+                setShowIntroOverlay(false);
+                nextId.current += 1;
+                setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
+                setInitializing(false);
+              }, SPARKLE_LINGER_MS);
             }, INTRO_VIDEO_DURATION_MS);
           } catch {
             // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음)
@@ -558,6 +594,29 @@ export default function ChatScreen() {
 
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
+      {showIntroOverlay && (
+        <View style={styles.introOverlay}>
+          <VideoView
+            player={introPlayer}
+            style={styles.introOverlayVideo}
+            contentFit="cover"
+            nativeControls={false}
+          />
+          <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
+          <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
+            {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+              <Sparkle
+                key={i}
+                progress={sparkleProgress}
+                angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+                color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+                radius={140}
+                size={14}
+              />
+            ))}
+          </View>
+        </View>
+      )}
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -606,18 +665,6 @@ export default function ChatScreen() {
                   <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
                 </Svg>
               </Animated.View>
-
-              <Animated.View style={[styles.introFlash, introFlashStyle]} pointerEvents="none" />
-              <View style={styles.sparkleLayer} pointerEvents="none">
-                {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
-                  <Sparkle
-                    key={i}
-                    progress={sparkleProgress}
-                    angle={(i / SPARKLE_COUNT) * Math.PI * 2}
-                    color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
-                  />
-                ))}
-              </View>
 
               <View style={styles.avatarWrap}>
                 <VideoView
@@ -811,6 +858,38 @@ const styles = StyleSheet.create({
   flexFill: {
     flex: 1,
   },
+  introOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 200,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  introOverlayVideo: {
+    width: "100%",
+    height: "100%",
+  },
+  introOverlayFlash: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#FFEFC9",
+  },
+  introOverlaySparkleLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -875,14 +954,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 104,
     height: 104,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sparkle: {
     position: "absolute",
-    top: 48,
-    left: 48,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   userAvatarStack: {
     width: 104,
