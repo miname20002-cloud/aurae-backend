@@ -52,6 +52,7 @@ const IDLE_SWITCH_MS = 7500;
 const REACTION_HOLD_MS = 7500;
 const TOAST_HOLD_MS = 4000;
 const MILESTONE_TOAST_HOLD_MS = 5000;
+const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 
 function emotionClipPath(companionId: string, emotion: string): string {
@@ -125,6 +126,12 @@ export default function ChatScreen() {
   const [milestoneToast, setMilestoneToast] = useState<{ streakDay: number; themeName: string | null } | null>(null);
   const milestoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paletteScale = useSharedValue(1);
+
+  // --- relationship level (badge + level-up toast) ---
+  const [relationshipLevel, setRelationshipLevel] = useState(1);
+  const [relationshipLevelName, setRelationshipLevelName] = useState("Just Met");
+  const [levelUpToast, setLevelUpToast] = useState<{ newLevel: number; levelName: string } | null>(null);
+  const levelUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
@@ -203,6 +210,13 @@ export default function ChatScreen() {
     milestoneTimer.current = setTimeout(() => setMilestoneToast(null), MILESTONE_TOAST_HOLD_MS);
   }
 
+  function showLevelUpToast(newLevel: number, levelName: string) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setLevelUpToast({ newLevel, levelName });
+    if (levelUpTimer.current) clearTimeout(levelUpTimer.current);
+    levelUpTimer.current = setTimeout(() => setLevelUpToast(null), LEVEL_UP_TOAST_HOLD_MS);
+  }
+
   async function handleOpenThemeModal() {
     setShowThemeModal(true);
     if (unseenThemeCount > 0) {
@@ -261,6 +275,9 @@ export default function ChatScreen() {
     (async () => {
       try {
         const history = await getChatHistory();
+        if (history.relationship_level) setRelationshipLevel(history.relationship_level);
+        if (history.relationship_level_name) setRelationshipLevelName(history.relationship_level_name);
+
         if (history.messages.length > 0) {
           setMessages(
             history.messages.map((m) => {
@@ -283,6 +300,8 @@ export default function ChatScreen() {
           greetingTried.current = true;
           try {
             const greeting = await getGreeting();
+            if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
+            if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
             nextId.current += 1;
             setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
             getActive().replace(assetUrl(greeting.asset_path));
@@ -361,6 +380,14 @@ export default function ChatScreen() {
       setReactionPath(result.asset_path);
       setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
 
+      if (typeof result.relationship_level === "number") {
+        setRelationshipLevel(result.relationship_level);
+      }
+      if (result.relationship_level_up) {
+        setRelationshipLevelName(result.relationship_level_up.level_name);
+        showLevelUpToast(result.relationship_level_up.new_level, result.relationship_level_up.level_name);
+      }
+
       if (result.streak) {
         setCurrentStreak(result.streak.current_streak);
 
@@ -400,7 +427,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
-        {(milestoneToast || bonusToast) && (
+        {(milestoneToast || levelUpToast || bonusToast) && (
           <View style={styles.toastWrap} pointerEvents="none">
             <View style={styles.toast}>
               {milestoneToast ? (
@@ -410,6 +437,13 @@ export default function ChatScreen() {
                     {milestoneToast.themeName ? ` "${milestoneToast.themeName}" theme unlocked` : ""}
                   </Text>
                   <Text style={styles.toastPoints}>tap 🎨 to try it</Text>
+                </>
+              ) : levelUpToast ? (
+                <>
+                  <Text style={styles.toastText}>
+                    💗 Level up! Lv.{levelUpToast.newLevel} — {levelUpToast.levelName}
+                  </Text>
+                  <Text style={styles.toastPoints}>{companion?.name ?? "they"} feel closer to you now</Text>
                 </>
               ) : bonusToast ? (
                 <>
@@ -475,6 +509,12 @@ export default function ChatScreen() {
               {companion?.name ?? companionName ?? "Your soul friend"}
             </Text>
           </View>
+
+          {relationshipLevel > 0 && (
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelText}>💗 {relationshipLevel}</Text>
+            </View>
+          )}
 
           {currentStreak > 0 && (
             <View style={styles.streakBadge}>
@@ -642,6 +682,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: colors.textSecondary,
+  },
+  levelBadge: {
+    backgroundColor: "rgba(255, 143, 171, 0.18)",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  levelText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FF8FAB",
   },
   streakBadge: {
     backgroundColor: "rgba(255, 184, 77, 0.18)",

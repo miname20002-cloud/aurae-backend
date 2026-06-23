@@ -56,6 +56,7 @@ export type SignupResponse = {
   companion: string;
   access_token: string;
   refresh_token: string;
+  existing_account?: boolean;
 };
 
 export type StreakInfo = {
@@ -70,6 +71,11 @@ export type BonusInfo = {
   reward_points_earned: number;
 };
 
+export type RelationshipLevelUp = {
+  new_level: number;
+  level_name: string;
+};
+
 export type ChatResponse = {
   reply: string;
   mood?: string;
@@ -79,12 +85,16 @@ export type ChatResponse = {
   limit_reached?: boolean;
   streak?: StreakInfo;
   bonus?: BonusInfo | null;
+  relationship_level?: number;
+  relationship_level_up?: RelationshipLevelUp | null;
 };
 
 export type GreetingResponse = {
   reply: string;
   emotion_tag: string;
   asset_path: string;
+  relationship_level?: number;
+  relationship_level_name?: string;
 };
 
 export type ChatHistoryItem = {
@@ -95,6 +105,8 @@ export type ChatHistoryItem = {
 export type ChatHistoryResponse = {
   messages: ChatHistoryItem[];
   asset_path: string | null;
+  relationship_level?: number;
+  relationship_level_name?: string;
 };
 
 export type RewardsState = {
