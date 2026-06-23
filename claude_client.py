@@ -59,18 +59,31 @@ def classify_fast(system_prompt: str, user_message: str, max_tokens: int = 200) 
     return response.choices[0].message.content.strip()
 
 
-def extract_insights(conversation_excerpt: str) -> dict:
+def extract_insights(conversation_excerpt: str) -> str:
     """
     Periodic summarization pass: turns raw recent messages into compact,
     privacy-conscious tags instead of storing verbatim transcripts long-term.
+
+    Also extracts at most one "memorable_event" per call - a short,
+    paraphrased, non-verbatim fact worth the companion naturally checking
+    back in on later (an upcoming event, a decision, something they're
+    worried/excited about). This rides on the same call as the existing
+    tag extraction so it adds zero additional API cost.
+
     Expected to return JSON; caller is responsible for parsing/validating.
     """
     system = (
         "You analyze a short excerpt of a conversation between a person and their "
         "AI companion. Output ONLY valid JSON with this shape, nothing else: "
         '{"emotional_patterns": ["short tag", ...], "topics_of_interest": ["short tag", ...], '
-        '"comfort_style": "direct|gentle|hype|unknown", "trust_signal": true|false}. '
-        "Keep tags short (2-4 words), non-verbatim, and non-identifying. Do not quote the user directly."
+        '"comfort_style": "direct|gentle|hype|unknown", "trust_signal": true|false, '
+        '"memorable_event": "short paraphrased fact, or null"}. '
+        "Keep tags short (2-4 words), non-verbatim, and non-identifying. Do not quote the user directly. "
+        "For memorable_event: only fill this in if something concrete and specific came up that a good "
+        "friend would naturally circle back to later - a named upcoming event, a decision they're "
+        "weighing, something they're worried or excited about. Phrase it as a short paraphrase under "
+        "12 words, never a direct quote, never including identifying details (no full names, addresses, "
+        "etc). If nothing like that came up in this excerpt, use null - don't force one."
     )
     client = _get_client()
     response = client.chat.completions.create(

@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 import asset_map
 import auth
 import claude_client
+import memories
 import mood as mood_module
 import realtime_search
 import resonance
@@ -198,6 +199,9 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
 
+    profile = session.get(UserInsightProfile, user.id)
+    level = profile.relationship_level if profile else 1
+
     recent = (
         session.query(ChatMessage)
         .filter(ChatMessage.user_id == user.id)
@@ -211,7 +215,12 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
     if user.last_emotion_asset and "_question." not in user.last_emotion_asset:
         asset_path = asset_map.asset_path_for(user.companion_id, user.last_emotion_asset)
 
-    return {"messages": messages, "asset_path": asset_path}
+    return {
+        "messages": messages,
+        "asset_path": asset_path,
+        "relationship_level": level,
+        "relationship_level_name": memories.level_name(level),
+    }
 
 
 def _build_system_prompt(
@@ -221,6 +230,7 @@ def _build_system_prompt(
     search_snippet: str | None,
     is_first_turn: bool,
     user_name: str,
+    active_memories: list[str] | None = None,
 ) -> str:
     patterns = json.loads(profile.emotional_patterns or "[]")
     topics = json.loads(profile.topics_of_interest or "[]")
@@ -235,7 +245,19 @@ def _build_system_prompt(
     if profile.comfort_style and profile.comfort_style != "unknown":
         context_lines.append(f"They tend to respond best to a {profile.comfort_style} comfort style.")
     context_block = "\n".join(context_lines)
-    level_note = f"Relationship level: {profile.relationship_level} (higher = more history together, more emotional shorthand, more inside jokes)."
+    level_note = (
+        f"Relationship level: {profile.relationship_level} ({memories.level_name(profile.relationship_level)}) "
+        "- higher = more history together, more emotional shorthand, more inside jokes."
+    )
+    depth_note = memories.relationship_depth_note(profile.relationship_level)
+
+    memory_block = None
+    if active_memories:
+        memory_lines = "\n".join(f"- {m}" for m in active_memories)
+        memory_block = (
+            "A couple specific things you remember from before that you could naturally check in on "
+            "if the moment genuinely fits - never force it in, never list them like a report:\n" + memory_lines
+        )
 
     mood_note = (
         f"Right now they seem to be feeling: {turn_mood['mood']} "
@@ -260,6 +282,10 @@ def _build_system_prompt(
     )
 
     blocks = [persona["base_system_prompt"], level_note, context_block, mood_note, emoji_note, intro_note]
+    if depth_note:
+        blocks.append(depth_note)
+    if memory_block:
+        blocks.append(memory_block)
     if resonance_hint:
         blocks.append(resonance_hint)
     if search_snippet:
@@ -316,7 +342,13 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     session.add(ChatMessage(user_id=user.id, role="assistant", content=reply))
     session.commit()
 
-    return {"reply": reply, "emotion_tag": emotion_tag, "asset_path": asset_path}
+    return {
+        "reply": reply,
+        "emotion_tag": emotion_tag,
+        "asset_path": asset_path,
+        "relationship_level": profile.relationship_level,
+        "relationship_level_name": memories.level_name(profile.relationship_level),
+    }
 
 
 @app.post("/chat")
@@ -326,6 +358,7 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     persona = PERSONAS[user.companion_id]
+    profile = session.get(UserInsightProfile, user.id)
 
     streak_info = rewards.update_streak(session, user)
 
@@ -344,6 +377,8 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "asset_path": asset_path,
             "streak": streak_info,
             "bonus": None,
+            "relationship_level": profile.relationship_level,
+            "relationship_level_up": None,
         }
 
     today = date.today().isoformat()
@@ -366,11 +401,11 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "limit_reached": True,
             "streak": streak_info,
             "bonus": None,
+            "relationship_level": profile.relationship_level,
+            "relationship_level_up": None,
         }
 
     reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
-
-    profile = session.get(UserInsightProfile, user.id)
 
     is_first_turn = session.query(ChatMessage).filter(
         ChatMessage.user_id == user.id, ChatMessage.role == "user"
@@ -381,7 +416,10 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
     if turn_mood.get("needs_realtime_info") and turn_mood.get("search_query"):
         search_snippet = realtime_search.search(turn_mood["search_query"])
 
-    system_prompt = _build_system_prompt(persona, profile, turn_mood, search_snippet, is_first_turn, user.name)
+    active_memories = memories.active_memories_for_prompt(session, user.id)
+    system_prompt = _build_system_prompt(
+        persona, profile, turn_mood, search_snippet, is_first_turn, user.name, active_memories
+    )
 
     recent = (
         session.query(ChatMessage)
@@ -409,9 +447,10 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
 
     bonus = rewards.maybe_grant_bonus(session, user)
 
+    level_up = None
     user_turns = session.query(ChatMessage).filter(ChatMessage.user_id == user.id, ChatMessage.role == "user").count()
     if user_turns % INSIGHT_REFRESH_INTERVAL == 0:
-        _refresh_insights(session, user, profile)
+        level_up = _refresh_insights(session, user, profile)
 
     return {
         "reply": reply,
@@ -421,10 +460,14 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         "crisis_flagged": False,
         "streak": streak_info,
         "bonus": bonus,
+        "relationship_level": profile.relationship_level,
+        "relationship_level_up": level_up,
     }
 
 
 def _refresh_insights(session, user, profile):
+    """Returns {"new_level": int, "level_name": str} if relationship_level
+    increased this call, otherwise None."""
     recent = (
         session.query(ChatMessage)
         .filter(ChatMessage.user_id == user.id)
@@ -437,12 +480,22 @@ def _refresh_insights(session, user, profile):
         raw = claude_client.extract_insights(excerpt)
         data = json.loads(raw)
     except Exception:
-        return
+        return None
 
     profile.emotional_patterns = json.dumps(data.get("emotional_patterns", []))
     profile.topics_of_interest = json.dumps(data.get("topics_of_interest", []))
     profile.comfort_style = data.get("comfort_style", profile.comfort_style)
+
+    old_level = profile.relationship_level
     if data.get("trust_signal"):
         profile.trust_markers += 1
     profile.relationship_level = 1 + profile.trust_markers // 3
     session.commit()
+
+    memorable_event = data.get("memorable_event")
+    if isinstance(memorable_event, str) and memorable_event.strip() and memorable_event.strip().lower() != "null":
+        memories.record_memorable_event(session, user.id, memorable_event.strip())
+
+    if profile.relationship_level > old_level:
+        return {"new_level": profile.relationship_level, "level_name": memories.level_name(profile.relationship_level)}
+    return None

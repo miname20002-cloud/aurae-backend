@@ -11,6 +11,12 @@ Reward system note: ShareEvent only logs *that* a share action happened and
 its type (e.g. "chat_bubble"), never the actual shared content/image, since
 that content already exists transiently in the app UI and doesn't need
 server-side duplication.
+
+Memory system note: UserMemory stores short, paraphrased, non-verbatim
+"recallable facts" (e.g. "has a job interview Friday") - never raw quotes -
+so the companion can naturally check back in on something later, the way a
+friend would. Capped per user and retired after being surfaced a few times
+(see memories.py) so it doesn't grow unbounded or get repeated forever.
 """
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey
@@ -66,6 +72,14 @@ class ShareEvent(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     moment_type = Column(String, nullable=False)  # e.g. "chat_bubble", "milestone", "theme"
     reward_granted = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User")
+class UserMemory(Base):
+    __tablename__ = "user_memories"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)  # short paraphrased fact, never a verbatim quote
+    surfaced_count = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User")
 def get_engine(db_url="sqlite:///aurae.db"):
