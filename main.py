@@ -14,6 +14,7 @@ import claude_client
 import mood as mood_module
 import realtime_search
 import resonance
+import rewards
 import safety
 from db import User, ChatMessage, UserInsightProfile, get_engine, get_session
 
@@ -23,6 +24,8 @@ PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json
 
 engine = get_engine(os.environ.get("DATABASE_URL", "sqlite:///aurae.db"))
 print(f"[DB DEBUG] Using: {'POSTGRES' if 'postgresql' in str(engine.url) else 'SQLITE - fallback!'} | URL host: {engine.url.host}")
+
+app.include_router(rewards.router)
 
 INSIGHT_REFRESH_INTERVAL = 6
 
@@ -293,6 +296,8 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         raise HTTPException(status_code=404, detail="User not found.")
     persona = PERSONAS[user.companion_id]
 
+    streak_info = rewards.update_streak(session, user)
+
     if safety.screen_for_crisis(req.message):
         reply = safety.build_crisis_response(persona["name"])
         session.add(ChatMessage(user_id=user.id, role="user", content=req.message))
@@ -301,7 +306,14 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         asset_path = asset_map.resolve_asset(user.companion_id, "neutral", user.last_emotion_asset)
         user.last_emotion_asset = os.path.basename(asset_path)
         session.commit()
-        return {"reply": reply, "crisis_flagged": True, "emotion_tag": "neutral", "asset_path": asset_path}
+        return {
+            "reply": reply,
+            "crisis_flagged": True,
+            "emotion_tag": "neutral",
+            "asset_path": asset_path,
+            "streak": streak_info,
+            "bonus": None,
+        }
 
     today = date.today().isoformat()
     if user.daily_count_date != today:
@@ -319,6 +331,8 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "asset_path": asset_path,
             "crisis_flagged": False,
             "limit_reached": True,
+            "streak": streak_info,
+            "bonus": None,
         }
 
     reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
@@ -360,6 +374,8 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
     session.add(ChatMessage(user_id=user.id, role="assistant", content=reply))
     session.commit()
 
+    bonus = rewards.maybe_grant_bonus(session, user)
+
     user_turns = session.query(ChatMessage).filter(ChatMessage.user_id == user.id, ChatMessage.role == "user").count()
     if user_turns % INSIGHT_REFRESH_INTERVAL == 0:
         _refresh_insights(session, user, profile)
@@ -370,6 +386,8 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         "emotion_tag": emotion_tag,
         "asset_path": asset_path,
         "crisis_flagged": False,
+        "streak": streak_info,
+        "bonus": bonus,
     }
 
 

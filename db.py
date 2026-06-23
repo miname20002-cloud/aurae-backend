@@ -6,6 +6,11 @@ sensitive disclosures. This keeps the personalization value (the AI "knows"
 the user) while reducing how much raw sensitive personal data is retained
 long-term. ChatMessage retention should have a defined max retention window
 in production, configurable per region's privacy law requirements.
+
+Reward system note: ShareEvent only logs *that* a share action happened and
+its type (e.g. "chat_bubble"), never the actual shared content/image, since
+that content already exists transiently in the app UI and doesn't need
+server-side duplication.
 """
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey
@@ -25,6 +30,16 @@ class User(Base):
     device_id = Column(String, nullable=True)
     refresh_token_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # --- reward sprint 1 ---
+    current_streak = Column(Integer, default=0, nullable=False)
+    longest_streak = Column(Integer, default=0, nullable=False)
+    last_active_date = Column(String, nullable=True)  # "YYYY-MM-DD", drives streak math
+    streak_freezes = Column(Integer, default=0, nullable=False)  # earned "skip a day" tokens
+    last_bonus_date = Column(String, nullable=True)  # "YYYY-MM-DD", caps surprise bonus to 1/day
+    reward_points = Column(Integer, default=0, nullable=False)  # soft currency from streaks/shares/bonuses
+    chat_theme = Column(String, default="default", nullable=False)  # active chat theme id
+
     messages = relationship("ChatMessage", back_populates="user")
     insight_profile = relationship("UserInsightProfile", back_populates="user", uselist=False)
 class ChatMessage(Base):
@@ -45,6 +60,14 @@ class UserInsightProfile(Base):
     trust_markers = Column(Integer, default=0)        # count, not raw content
     last_updated = Column(DateTime, default=datetime.utcnow)
     user = relationship("User", back_populates="insight_profile")
+class ShareEvent(Base):
+    __tablename__ = "share_events"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    moment_type = Column(String, nullable=False)  # e.g. "chat_bubble", "milestone", "theme"
+    reward_granted = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User")
 def get_engine(db_url="sqlite:///aurae.db"):
     engine = create_engine(
         db_url,
