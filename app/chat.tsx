@@ -505,22 +505,19 @@ export default function ChatScreen() {
           </View>
 
           <View style={styles.headerText}>
-            <Text style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}>
+            <Text
+              style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {companion?.name ?? companionName ?? "Your soul friend"}
             </Text>
           </View>
 
-          {relationshipLevel > 0 && (
-            <View style={styles.levelBadge}>
-              <Text style={styles.levelText}>💗 {relationshipLevel}</Text>
-            </View>
-          )}
-
-          {currentStreak > 0 && (
-            <View style={styles.streakBadge}>
-              <Text style={styles.streakText}>🔥 {currentStreak}</Text>
-            </View>
-          )}
+          <View style={styles.statsRow}>
+            {relationshipLevel > 0 && <Text style={styles.levelText}>💗{relationshipLevel}</Text>}
+            {currentStreak > 0 && <Text style={styles.streakText}>🔥{currentStreak}</Text>}
+          </View>
 
           <Pressable onPress={handleOpenThemeModal} style={styles.themeButton}>
             <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
@@ -532,8 +529,6 @@ export default function ChatScreen() {
               </View>
             )}
           </Pressable>
-
-          {userName && <Text style={styles.userName}>{userName}</Text>}
         </View>
 
         <FlatList
@@ -673,32 +668,21 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+    minWidth: 0,
   },
   name: {
     fontSize: 16,
     fontWeight: "700",
   },
-  userName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: colors.textSecondary,
-  },
-  levelBadge: {
-    backgroundColor: "rgba(255, 143, 171, 0.18)",
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   levelText: {
     fontSize: 13,
     fontWeight: "700",
     color: "#FF8FAB",
-  },
-  streakBadge: {
-    backgroundColor: "rgba(255, 184, 77, 0.18)",
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
   },
   streakText: {
     fontSize: 13,
