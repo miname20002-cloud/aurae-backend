@@ -25,6 +25,7 @@ import Animated, {
   withRepeat,
   withTiming,
   Easing,
+  type SharedValue,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -142,6 +143,27 @@ const EMOTION_GLOW_RGB: Record<string, string> = {
   question: "140, 217, 255",
 };
 
+const SPARKLE_COLORS = ["#FFD76B", "#FF8FAB", "#8CD9FF", "#FFE9B0"];
+const SPARKLE_COUNT = 8;
+const SPARKLE_RADIUS = 64;
+
+function Sparkle({ progress, angle, color }: { progress: SharedValue<number>; angle: number; color: string }) {
+  const style = useAnimatedStyle(() => {
+    const p = progress.value;
+    const dist = p * SPARKLE_RADIUS;
+    const opacity = p < 0.12 ? p / 0.12 : Math.max(0, 1 - (p - 0.12) / 0.88);
+    return {
+      opacity,
+      transform: [
+        { translateX: Math.cos(angle) * dist },
+        { translateY: Math.sin(angle) * dist },
+        { scale: 0.5 + p * 0.7 },
+      ],
+    };
+  });
+  return <Animated.View style={[styles.sparkle, style, { backgroundColor: color }]} pointerEvents="none" />;
+}
+
 export default function ChatScreen() {
   const { companion: companionName } = useLocalSearchParams<{
     userId: string;
@@ -202,6 +224,28 @@ export default function ChatScreen() {
   const animatedGlowStyle = useAnimatedStyle(() => ({
     opacity: breath.value,
   }));
+
+  // --- intro video entrance/exit flourish (flash burst + sparkle burst) ---
+  const introFlashOpacity = useSharedValue(0);
+  const introFlashScale = useSharedValue(0.4);
+  const sparkleProgress = useSharedValue(0);
+
+  const introFlashStyle = useAnimatedStyle(() => ({
+    opacity: introFlashOpacity.value,
+    transform: [{ scale: introFlashScale.value }],
+  }));
+
+  function triggerIntroFlash() {
+    introFlashScale.value = 0.4;
+    introFlashOpacity.value = 0.85;
+    introFlashScale.value = withTiming(1.8, { duration: 650, easing: Easing.out(Easing.ease) });
+    introFlashOpacity.value = withTiming(0, { duration: 650, easing: Easing.out(Easing.ease) });
+  }
+
+  function triggerSparkleBurst() {
+    sparkleProgress.value = 0;
+    sparkleProgress.value = withTiming(1, { duration: 750, easing: Easing.out(Easing.cubic) });
+  }
 
   useEffect(() => {
     if (unseenThemeCount > 0) {
@@ -386,6 +430,8 @@ export default function ChatScreen() {
             getActive().replace(assetUrl(greeting.asset_path));
             getActive().play();
             setReactionPath(greeting.asset_path);
+            triggerIntroFlash();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
             const activePlayer = getActive();
             let revealed = false;
@@ -395,6 +441,8 @@ export default function ChatScreen() {
               revealed = true;
               if (fallbackTimer) clearTimeout(fallbackTimer);
               subscription.remove();
+              triggerSparkleBurst();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               nextId.current += 1;
               setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
               setReactionPath(null);
@@ -597,6 +645,18 @@ export default function ChatScreen() {
                     mask="url(#avatarCircleMask)"
                   />
                 </Svg>
+              </View>
+
+              <Animated.View style={[styles.introFlash, introFlashStyle]} pointerEvents="none" />
+              <View style={styles.sparkleLayer} pointerEvents="none">
+                {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+                  <Sparkle
+                    key={i}
+                    progress={sparkleProgress}
+                    angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+                    color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+                  />
+                ))}
               </View>
             </View>
             <Text
@@ -810,6 +870,26 @@ const styles = StyleSheet.create({
   avatarMedia: {
     width: "100%",
     height: "100%",
+  },
+  introFlash: {
+    position: "absolute",
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: "#FFEFC9",
+  },
+  sparkleLayer: {
+    position: "absolute",
+    width: 104,
+    height: 104,
+  },
+  sparkle: {
+    position: "absolute",
+    top: 48,
+    left: 48,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   userAvatarStack: {
     width: 104,
