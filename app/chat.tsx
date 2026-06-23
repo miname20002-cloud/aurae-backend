@@ -464,27 +464,18 @@ export default function ChatScreen() {
             // 인사 영상(Chloe_intro.mp4 등)은 시선을 집중시키는 한 번뿐인
             // 연출이라, 작은 아바타가 아니라 채팅창 전체를 덮는 오버레이로
             // 보여준다. 끝날 때까지 메시지 말풍선과 입력창도 같이 묻어둔다.
+            // [임시 디버그용 단순화] 플래시/스파클 효과를 일단 빼고
+            // 영상 재생 자체만 확인한다 - 효과가 원인인지 영상 재생 자체가
+            // 원인인지 분리해서 보기 위함.
+            console.log("[intro] asset_path:", greeting.asset_path, "url:", assetUrl(greeting.asset_path));
             introPlayer.replace(assetUrl(greeting.asset_path));
             introPlayer.play();
-            setShowIntroOverlay(true);
-            triggerIntroFlash();
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-            // expo-video의 "재생 끝남" 이벤트에 의존하지 않고, 인트로
-            // 영상이 정확히 10초로 만들어졌다는 걸 알고 있으니 그 시간만큼
-            // 타이머로 직접 기다린다 - 이벤트 유무/버전 차이에 좌우되지 않는
-            // 가장 확실한 방법.
             setTimeout(() => {
-              triggerSparkleBurst();
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-              // 스파클이 영상 위에서 잠깐 보인 다음에 오버레이를 내리고
-              // 채팅 화면(이미 작은 아바타는 평소 idle 상태)을 드러낸다.
-              setTimeout(() => {
-                setShowIntroOverlay(false);
-                nextId.current += 1;
-                setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
-                setInitializing(false);
-              }, SPARKLE_LINGER_MS);
+              setShowIntroOverlay(false);
+              nextId.current += 1;
+              setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
+              setInitializing(false);
             }, INTRO_VIDEO_DURATION_MS);
           } catch {
             // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
