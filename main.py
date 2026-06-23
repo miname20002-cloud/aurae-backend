@@ -115,6 +115,27 @@ def signup(req: SignupRequest):
         raise HTTPException(status_code=400, detail="companion_id does not match gender_preference.")
 
     session = get_session(engine)
+
+    # This device already has an account - reconnect to it instead of creating
+    # a duplicate. Without this check, re-running onboarding on the same device
+    # (intentionally or by accident) would silently fragment a user's streak/
+    # chat history/relationship_level across orphaned rows.
+    existing_user = session.query(User).filter(User.device_id == req.device_id).first()
+    if existing_user:
+        refresh_token = auth.generate_refresh_token()
+        existing_user.refresh_token_hash = auth.hash_refresh_token(refresh_token)
+        existing_user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=auth.REFRESH_TOKEN_TTL_DAYS)
+        session.commit()
+
+        access_token = auth.create_access_token(existing_user.id)
+        return {
+            "user_id": existing_user.id,
+            "companion": PERSONAS[existing_user.companion_id]["name"],
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "existing_account": True,
+        }
+
     user = User(name=req.name, age_verified=True, companion_id=req.companion_id)
     session.add(user)
     session.commit()
@@ -129,9 +150,10 @@ def signup(req: SignupRequest):
     access_token = auth.create_access_token(user.id)
     return {
         "user_id": user.id,
-        "companion": PERSONAS[req.companion_id]["name"],
+        "companion": PERSONAS[user.companion_id]["name"],
         "access_token": access_token,
         "refresh_token": refresh_token,
+        "existing_account": False,
     }
 
 
