@@ -57,6 +57,7 @@ const MILESTONE_TOAST_HOLD_MS = 5000;
 const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
+const INTRO_FALLBACK_MS = 20000;
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -369,6 +370,7 @@ export default function ChatScreen() {
             setReactionPath(history.asset_path);
             setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
           }
+          setInitializing(false);
         } else if (!greetingTried.current) {
           // 진짜 첫 만남 - 캐릭터가 먼저 인사하게
           greetingTried.current = true;
@@ -376,22 +378,41 @@ export default function ChatScreen() {
             const greeting = await getGreeting();
             if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
             if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
-            nextId.current += 1;
-            setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
+
+            // 인사 영상(Chloe_intro.mp4 등)은 시선을 집중시키는 한 번뿐인
+            // 연출이라, 영상이 끝날 때까지 메시지 말풍선과 입력창을 같이
+            // 묻어둔다 - 영상 보여주는 동안 텍스트가 같이 떠서 산만해지지
+            // 않게.
             getActive().replace(assetUrl(greeting.asset_path));
             getActive().play();
             setReactionPath(greeting.asset_path);
-            setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
+
+            const activePlayer = getActive();
+            let revealed = false;
+            let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+            const revealGreeting = () => {
+              if (revealed) return;
+              revealed = true;
+              if (fallbackTimer) clearTimeout(fallbackTimer);
+              subscription.remove();
+              nextId.current += 1;
+              setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
+              setReactionPath(null);
+              setInitializing(false);
+            };
+            const subscription = activePlayer.addListener("playToEnd", revealGreeting);
+            // 영상 이벤트가 어떤 이유로든 안 터질 경우를 대비한 안전장치 -
+            // 화면이 영원히 안 풀리는 것보단 늦게라도 메시지가 뜨는 게 낫다.
+            fallbackTimer = setTimeout(revealGreeting, INTRO_FALLBACK_MS);
           } catch {
             // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음)
+            setInitializing(false);
           }
+        } else {
+          setInitializing(false);
         }
       } catch {
         // 기록 불러오기 실패해도 빈 화면으로 시작
-      } finally {
-        // 기록/인사말 로딩이 끝나기 전엔 입력을 막아둔다 (콜드 스타트 시 50초+
-        // 걸릴 수 있는데, 그 사이 유저가 먼저 메시지를 보내버리면 인사말과
-        // 순서가 꼬이거나 인사말이 조용히 실패할 수 있어서)
         setInitializing(false);
       }
     })();

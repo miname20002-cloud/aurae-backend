@@ -307,6 +307,10 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     Generates the character's proactive opening line right after signup,
     before the user has typed anything. Only works once - if any messages
     already exist for this user, refuses (use /chat normally instead).
+
+    Uses a dedicated cinematic "intro" video clip (e.g. Chloe_Assets/Chloe_intro.mp4)
+    instead of a regular emotion-reaction clip, since this is meant to be a
+    one-time attention-grabbing moment rather than a reactive expression.
     """
     session = get_session(engine)
     user = session.get(User, current_user_id)
@@ -329,8 +333,11 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
         "anything yet, this is your chance to message first. Open with a short, punchy, "
         "attention-grabbing line that matches your personality and immediately makes this feel "
         "different from a generic AI chatbot greeting. Be specific and a little surprising, not "
-        "generic small talk like 'how can I help you today.' Use their name naturally if it "
-        "fits, but don't ask what it is - you already know it."
+        "generic small talk like 'how can I help you today.' Somewhere in this opener, in your "
+        "own voice and personality rather than stating it flatly, let them know you want this to "
+        "be a genuine, honest space between just the two of you going forward - not performative, "
+        "not generic. Use their name naturally if it fits, but don't ask what it is - you already "
+        "know it."
     )
     history = [{"role": "user", "content": opener_instruction}]
 
@@ -340,7 +347,8 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "smile"
     reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
 
-    asset_path = asset_map.resolve_asset(user.companion_id, emotion_tag, user.last_emotion_asset)
+    cap = user.companion_id[:1].upper() + user.companion_id[1:]
+    asset_path = f"{cap}_Assets/{cap}_intro.mp4"
     user.last_emotion_asset = os.path.basename(asset_path)
 
     session.add(ChatMessage(user_id=user.id, role="assistant", content=reply))
