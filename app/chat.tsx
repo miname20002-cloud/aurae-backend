@@ -60,6 +60,7 @@ const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
 const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
+const INTRO_FADE_OUT_MS = 600; // smooth fade duration as the intro overlay dissolves into the revealed chat UI
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -259,6 +260,10 @@ export default function ChatScreen() {
   const introFlashOpacity = useSharedValue(0);
   const introFlashScale = useSharedValue(0.4);
   const sparkleProgress = useSharedValue(0);
+  const introOverlayOpacity = useSharedValue(0);
+  const introOverlayAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: introOverlayOpacity.value,
+  }));
 
   const introFlashStyle = useAnimatedStyle(() => ({
     opacity: introFlashOpacity.value,
@@ -456,6 +461,7 @@ export default function ChatScreen() {
           // 보이게 한다.
           greetingTried.current = true;
           setShowIntroOverlay(true);
+          introOverlayOpacity.value = 1;
           try {
             const greeting = await getGreeting();
             if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
@@ -464,22 +470,33 @@ export default function ChatScreen() {
             // 인사 영상(Chloe_intro.mp4 등)은 시선을 집중시키는 한 번뿐인
             // 연출이라, 작은 아바타가 아니라 채팅창 전체를 덮는 오버레이로
             // 보여준다. 끝날 때까지 메시지 말풍선과 입력창도 같이 묻어둔다.
-            // [임시 디버그용 단순화] 플래시/스파클 효과를 일단 빼고
-            // 영상 재생 자체만 확인한다 - 효과가 원인인지 영상 재생 자체가
-            // 원인인지 분리해서 보기 위함.
-            console.log("[intro] asset_path:", greeting.asset_path, "url:", assetUrl(greeting.asset_path));
             introPlayer.replace(assetUrl(greeting.asset_path));
             introPlayer.play();
+            triggerIntroFlash();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
             setTimeout(() => {
-              setShowIntroOverlay(false);
-              nextId.current += 1;
-              setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
-              setInitializing(false);
+              // 영상 위에서 스파클이 잠깐 보이고, 그 다음 오버레이가 부드럽게
+              // 페이드아웃되면서 이미 준비된 메시지가 자연스럽게 드러난다.
+              triggerSparkleBurst();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              setTimeout(() => {
+                introOverlayOpacity.value = withTiming(0, {
+                  duration: INTRO_FADE_OUT_MS,
+                  easing: Easing.out(Easing.ease),
+                });
+                nextId.current += 1;
+                setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
+                setTimeout(() => {
+                  setShowIntroOverlay(false);
+                  setInitializing(false);
+                }, INTRO_FADE_OUT_MS);
+              }, SPARKLE_LINGER_MS);
             }, INTRO_VIDEO_DURATION_MS);
           } catch {
             // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
             // 띄워둔 채로 멈춰있으면 안 되니 반드시 내려준다.
+            introOverlayOpacity.value = 0;
             setShowIntroOverlay(false);
             setInitializing(false);
           }
@@ -592,8 +609,8 @@ export default function ChatScreen() {
 
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
-      <View
-        style={[styles.introOverlay, { opacity: showIntroOverlay ? 1 : 0 }]}
+      <Animated.View
+        style={[styles.introOverlay, introOverlayAnimatedStyle]}
         pointerEvents={showIntroOverlay ? "auto" : "none"}
       >
         <VideoView
@@ -615,7 +632,7 @@ export default function ChatScreen() {
             />
           ))}
         </View>
-      </View>
+      </Animated.View>
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -666,10 +683,17 @@ export default function ChatScreen() {
               </Animated.View>
 
               <View style={styles.avatarWrap}>
+                {companion?.facePath && (
+                  <Image
+                    source={{ uri: assetUrl(companion.facePath) }}
+                    style={styles.avatarMedia}
+                    resizeMode="cover"
+                  />
+                )}
                 <VideoView
                   key={`a-${resumeKey}`}
                   player={playerA}
-                  style={[styles.avatarMedia, { opacity: activeIsA ? 1 : 0 }]}
+                  style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]}
                   contentFit="cover"
                   nativeControls={false}
                 />
