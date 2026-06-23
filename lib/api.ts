@@ -189,8 +189,13 @@ async function refreshAccessToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    await clearAuthTokens();
     const body = await response.text();
+    // Only treat this as a real logout if the server explicitly rejected the
+    // refresh token (401). Other failures (502/503/timeouts during a cold
+    // Render restart, etc.) are transient and shouldn't wipe a valid session.
+    if (response.status === 401) {
+      await clearAuthTokens();
+    }
     throw new Error(`Refresh failed (${response.status}): ${body}`);
   }
 
