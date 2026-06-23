@@ -449,8 +449,13 @@ export default function ChatScreen() {
           }
           setInitializing(false);
         } else if (!greetingTried.current) {
-          // 진짜 첫 만남 - 캐릭터가 먼저 인사하게
+          // 진짜 첫 만남 - 캐릭터가 먼저 인사하게.
+          // 인사 API 응답을 기다리는 동안 평소 채팅화면이 잠깐 보였다가
+          // 오버레이로 덮이면 어색하니, 첫 만남이라는 걸 아는 즉시(API 응답
+          // 전부터) 오버레이를 먼저 띄워서 평소 화면이 한 프레임도 안
+          // 보이게 한다.
           greetingTried.current = true;
+          setShowIntroOverlay(true);
           try {
             const greeting = await getGreeting();
             if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
@@ -482,7 +487,9 @@ export default function ChatScreen() {
               }, SPARKLE_LINGER_MS);
             }, INTRO_VIDEO_DURATION_MS);
           } catch {
-            // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음)
+            // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
+            // 띄워둔 채로 멈춰있으면 안 되니 반드시 내려준다.
+            setShowIntroOverlay(false);
             setInitializing(false);
           }
         } else {

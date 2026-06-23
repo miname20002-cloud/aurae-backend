@@ -348,7 +348,7 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     reply = EMO_TAG_PATTERN.sub("", raw_reply).strip()
 
     cap = user.companion_id[:1].upper() + user.companion_id[1:]
-    asset_path = f"{cap}_Assets/{cap}_intro.mp4"
+    asset_path = f"assets/{cap}_Assets/{cap}_intro.mp4"
     user.last_emotion_asset = os.path.basename(asset_path)
 
     session.add(ChatMessage(user_id=user.id, role="assistant", content=reply))
