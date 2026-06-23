@@ -13,7 +13,9 @@ import {
   StatusBar,
   Share,
   Modal,
+  Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Svg, { Defs, Mask, Rect, Circle, RadialGradient, Stop } from "react-native-svg";
@@ -54,6 +56,7 @@ const TOAST_HOLD_MS = 4000;
 const MILESTONE_TOAST_HOLD_MS = 5000;
 const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
+const USER_PHOTO_KEY = "aurae_user_photo_uri";
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -77,6 +80,54 @@ function hexToRgba(hex: string, alpha: number): string {
 
 function computeUnseenCount(themesList: ThemeInfo[], seenStreak: number): number {
   return themesList.filter((t) => t.unlocked && t.unlock_streak > seenStreak).length;
+}
+
+function complementaryColor(hex: string): string {
+  const sanitized = hex.replace("#", "");
+  const r = parseInt(sanitized.substring(0, 2), 16) / 255;
+  const g = parseInt(sanitized.substring(2, 4), 16) / 255;
+  const b = parseInt(sanitized.substring(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+
+  // rotate hue 180 degrees for the complementary color
+  h = (h + 0.5) % 1;
+
+  function hue2rgb(p: number, q: number, t: number) {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  }
+
+  let r2: number, g2: number, b2: number;
+  if (s === 0) {
+    r2 = g2 = b2 = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r2 = hue2rgb(p, q, h + 1 / 3);
+    g2 = hue2rgb(p, q, h);
+    b2 = hue2rgb(p, q, h - 1 / 3);
+  }
+
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r2)}${toHex(g2)}${toHex(b2)}`;
 }
 
 const EMOTION_GLOW_RGB: Record<string, string> = {
@@ -107,6 +158,7 @@ export default function ChatScreen() {
   const [reactionPath, setReactionPath] = useState<string | null>(null);
   const [resumeKey, setResumeKey] = useState(0);
   const [userName, setUserName] = useState<string | null>(null);
+  const [userPhotoUri, setUserPhotoUri] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const nextId = useRef(0);
   const greetingTried = useRef(false);
@@ -136,6 +188,7 @@ export default function ChatScreen() {
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
+  const userGlowColor = complementaryColor(companion?.accent ?? "#7C8CFF");
 
   const breath = useSharedValue(0.4);
   useEffect(() => {
@@ -176,8 +229,29 @@ export default function ChatScreen() {
     (async () => {
       const session = await getSession();
       if (session) setUserName(session.name);
+      const savedPhoto = await AsyncStorage.getItem(USER_PHOTO_KEY);
+      if (savedPhoto) setUserPhotoUri(savedPhoto);
     })();
   }, []);
+
+  async function handlePickUserPhoto() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError("Photo access is needed to set your picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      const uri = result.assets[0].uri;
+      setUserPhotoUri(uri);
+      AsyncStorage.setItem(USER_PHOTO_KEY, uri).catch(() => {});
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -531,11 +605,32 @@ export default function ChatScreen() {
           </View>
 
           <View style={styles.headerSide}>
-            <View style={styles.userAvatarStack}>
+            <Pressable onPress={handlePickUserPhoto} style={styles.userAvatarStack}>
+              <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
+                <Svg width={104} height={104} viewBox="0 0 104 104">
+                  <Defs>
+                    <RadialGradient id="userGlowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
+                      <Stop offset="0%" stopColor={userGlowColor} stopOpacity={0.9} />
+                      <Stop offset="65%" stopColor={userGlowColor} stopOpacity={0.45} />
+                      <Stop offset="100%" stopColor={userGlowColor} stopOpacity={0} />
+                    </RadialGradient>
+                  </Defs>
+                  <Circle cx="52" cy="52" r="52" fill="url(#userGlowGradient)" />
+                </Svg>
+              </Animated.View>
               <View style={styles.userAvatarCircle}>
-                <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
+                {userPhotoUri ? (
+                  <Image source={{ uri: userPhotoUri }} style={styles.userAvatarImage} />
+                ) : (
+                  <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
+                )}
               </View>
-            </View>
+              {!userPhotoUri && (
+                <View style={styles.userPhotoHint}>
+                  <Text style={styles.userPhotoHintText}>📷</Text>
+                </View>
+              )}
+            </Pressable>
             {userName && (
               <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">
                 {userName}
@@ -671,7 +766,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 50,
+    paddingTop: 40,
   },
   avatarStack: {
     width: 104,
@@ -706,8 +801,7 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 36,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -715,6 +809,27 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: colors.textSecondary,
+  },
+  userAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 36,
+  },
+  userPhotoHint: {
+    position: "absolute",
+    bottom: 14,
+    right: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userPhotoHintText: {
+    fontSize: 11,
   },
   statsRow: {
     flexDirection: "row",
