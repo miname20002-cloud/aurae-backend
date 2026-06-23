@@ -106,6 +106,7 @@ export default function ChatScreen() {
   const [reactionPath, setReactionPath] = useState<string | null>(null);
   const [resumeKey, setResumeKey] = useState(0);
   const [userName, setUserName] = useState<string | null>(null);
+  const [initializing, setInitializing] = useState(true);
   const nextId = useRef(0);
   const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
@@ -294,6 +295,11 @@ export default function ChatScreen() {
         }
       } catch {
         // 기록 불러오기 실패해도 빈 화면으로 시작
+      } finally {
+        // 기록/인사말 로딩이 끝나기 전엔 입력을 막아둔다 (콜드 스타트 시 50초+
+        // 걸릴 수 있는데, 그 사이 유저가 먼저 메시지를 보내버리면 인사말과
+        // 순서가 꼬이거나 인사말이 조용히 실패할 수 있어서)
+        setInitializing(false);
       }
     })();
   }, []);
@@ -340,7 +346,7 @@ export default function ChatScreen() {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sending || initializing) return;
 
     setInput("");
     setError(null);
@@ -515,7 +521,15 @@ export default function ChatScreen() {
             </Pressable>
           )}
           ListEmptyComponent={
-            <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
+            initializing ? (
+              <Animated.View style={[styles.typingBubble, animatedGlowStyle]}>
+                <Text style={styles.typingText}>
+                  {companion?.name ?? "Chloe"} is typing...
+                </Text>
+              </Animated.View>
+            ) : (
+              <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
+            )
           }
         />
 
@@ -525,17 +539,17 @@ export default function ChatScreen() {
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="say something"
+            placeholder={initializing ? "Chloe is getting ready..." : "say something"}
             placeholderTextColor={colors.textTertiary}
             style={[
               styles.input,
               companion?.accent && { borderColor: hexToRgba(companion.accent, 0.5) },
             ]}
-            editable={!sending}
+            editable={!sending && !initializing}
             onSubmitEditing={handleSend}
             returnKeyType="send"
           />
-          {sending ? (
+          {sending || initializing ? (
             <ActivityIndicator color={companion?.accent ?? colors.accent} style={styles.sendButton} />
           ) : (
             <Pressable onPress={handleSend} style={styles.sendButton}>
@@ -705,6 +719,18 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: "center",
     marginTop: spacing.xl,
+  },
+  typingBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xl,
+  },
+  typingText: {
+    color: colors.textTertiary,
+    fontSize: 13,
   },
   bubble: {
     maxWidth: "80%",
