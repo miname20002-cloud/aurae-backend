@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   },
   toastWrap: {
     position: "absolute",
-    top: 162,
+    top: 170,
     left: 0,
     right: 0,
     alignItems: "center",
