@@ -456,79 +456,90 @@ export default function ChatScreen() {
         )}
 
         <View style={styles.header}>
-          <View style={styles.avatarStack}>
-            <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
-              <Svg width={104} height={104} viewBox="0 0 104 104">
-                <Defs>
-                  <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
-                    <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
-                    <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
-                    <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
-                  </RadialGradient>
-                </Defs>
-                <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
-              </Svg>
-            </Animated.View>
+          <View style={styles.headerSide}>
+            <View style={styles.avatarStack}>
+              <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
+                <Svg width={104} height={104} viewBox="0 0 104 104">
+                  <Defs>
+                    <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
+                      <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
+                      <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
+                      <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
+                    </RadialGradient>
+                  </Defs>
+                  <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
+                </Svg>
+              </Animated.View>
 
-            <View style={styles.avatarWrap}>
-              <VideoView
-                key={`a-${resumeKey}`}
-                player={playerA}
-                style={[styles.avatarMedia, { opacity: activeIsA ? 1 : 0 }]}
-                contentFit="cover"
-                nativeControls={false}
-              />
-              <VideoView
-                key={`b-${resumeKey}`}
-                player={playerB}
-                style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
-                contentFit="cover"
-                nativeControls={false}
-              />
-              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
-                <Defs>
-                  <Mask id="avatarCircleMask">
-                    <Rect x="0" y="0" width="72" height="72" fill="white" />
-                    <Circle cx="36" cy="36" r="34" fill="black" />
-                  </Mask>
-                </Defs>
-                <Rect
-                  x="0"
-                  y="0"
-                  width="72"
-                  height="72"
-                  fill={colors.background}
-                  mask="url(#avatarCircleMask)"
+              <View style={styles.avatarWrap}>
+                <VideoView
+                  key={`a-${resumeKey}`}
+                  player={playerA}
+                  style={[styles.avatarMedia, { opacity: activeIsA ? 1 : 0 }]}
+                  contentFit="cover"
+                  nativeControls={false}
                 />
-              </Svg>
+                <VideoView
+                  key={`b-${resumeKey}`}
+                  player={playerB}
+                  style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+                <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
+                  <Defs>
+                    <Mask id="avatarCircleMask">
+                      <Rect x="0" y="0" width="72" height="72" fill="white" />
+                      <Circle cx="36" cy="36" r="34" fill="black" />
+                    </Mask>
+                  </Defs>
+                  <Rect
+                    x="0"
+                    y="0"
+                    width="72"
+                    height="72"
+                    fill={colors.background}
+                    mask="url(#avatarCircleMask)"
+                  />
+                </Svg>
+              </View>
             </View>
-          </View>
-
-          <View style={styles.headerText}>
             <Text
-              style={[styles.name, { color: companion?.accent ?? colors.textPrimary }]}
+              style={[styles.sideName, { color: companion?.accent ?? colors.textPrimary }]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {companion?.name ?? companionName ?? "Your soul friend"}
+              {companion?.name ?? companionName ?? "Friend"}
             </Text>
           </View>
 
-          <View style={styles.statsRow}>
-            {relationshipLevel > 0 && <Text style={styles.levelText}>💗{relationshipLevel}</Text>}
-            {currentStreak > 0 && <Text style={styles.streakText}>🔥{currentStreak}</Text>}
+          <View style={styles.headerCenter}>
+            <View style={styles.statsRow}>
+              {relationshipLevel > 0 && <Text style={styles.levelText}>💗{relationshipLevel}</Text>}
+              {currentStreak > 0 && <Text style={styles.streakText}>🔥{currentStreak}</Text>}
+              <Pressable onPress={handleOpenThemeModal} style={styles.themeButtonInline}>
+                <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
+                  <Text style={styles.themeButtonText}>🎨</Text>
+                </Animated.View>
+                {unseenThemeCount > 0 && (
+                  <View style={styles.themeBadgeDot}>
+                    <Text style={styles.themeBadgeText}>{unseenThemeCount}</Text>
+                  </View>
+                )}
+              </Pressable>
+            </View>
           </View>
 
-          <Pressable onPress={handleOpenThemeModal} style={styles.themeButton}>
-            <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
-              <Text style={styles.themeButtonText}>🎨</Text>
-            </Animated.View>
-            {unseenThemeCount > 0 && (
-              <View style={styles.themeBadgeDot}>
-                <Text style={styles.themeBadgeText}>{unseenThemeCount}</Text>
-              </View>
+          <View style={styles.headerSide}>
+            <View style={styles.userAvatarCircle}>
+              <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
+            </View>
+            {userName && (
+              <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">
+                {userName}
+              </Text>
             )}
-          </Pressable>
+          </View>
         </View>
 
         <FlatList
@@ -635,14 +646,30 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     paddingTop: spacing.sm,
-    paddingLeft: spacing.xs,
-    paddingRight: spacing.lg,
+    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  headerSide: {
+    alignItems: "center",
+    width: 78,
+  },
+  sideName: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+    textAlign: "center",
+    color: colors.textPrimary,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: spacing.lg,
   },
   avatarStack: {
     width: 104,
@@ -666,18 +693,25 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
+  userAvatarCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  name: {
-    fontSize: 16,
+  userAvatarInitial: {
+    fontSize: 22,
     fontWeight: "700",
+    color: colors.textSecondary,
   },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 10,
   },
   levelText: {
     fontSize: 13,
@@ -689,9 +723,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFB84D",
   },
-  themeButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+  themeButtonInline: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
     position: "relative",
   },
   themeButtonText: {
