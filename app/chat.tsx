@@ -30,6 +30,12 @@ import Animated, {
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
+import {
+  RewardedAd,
+  RewardedAdEventType,
+  AdEventType,
+  TestIds,
+} from "react-native-google-mobile-ads";
 import { useFonts } from "expo-font";
 import { Fredoka_600SemiBold, Fredoka_700Bold } from "@expo-google-fonts/fredoka";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -66,6 +72,16 @@ const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
 const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
+// ⚠️ 항상 테스트 광고단위로 고정해둔다. __DEV__로 분기하면 EAS preview
+// 빌드(지금 테스트 중인 그 빌드)에서는 false가 돼서 진짜 광고단위가
+// 활성화되는데, 본인이 직접 눌러서 테스트하면 AdMob 자기클릭(self-click)
+// 정책 위반으로 계정이 정지될 수 있다.
+//
+// Play Store에 정식 공개 직전에만 아래 줄을 실제 광고단위ID로 바꾸거나,
+// 더 안전하게는 본인 테스트폰을 AdMob 테스트기기로 등록해서(설정 -> 광고
+// SDK requestConfiguration의 testDeviceIdentifiers) 진짜 ID를 쓰면서도
+// 항상 테스트광고만 받게 하는 방법을 추천한다.
+const AD_BONUS_UNIT_ID = TestIds.REWARDED; // TODO: 정식 출시 직전에만 "ca-app-pub-9861327921813724/2624188129"로 교체
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
 const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
@@ -270,6 +286,8 @@ export default function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const [adBonusOffer, setAdBonusOffer] = useState(false);
   const [watchingAd, setWatchingAd] = useState(false);
+  const [adReady, setAdReady] = useState(false);
+  const rewardedAdRef = useRef(RewardedAd.createForAdRequest(AD_BONUS_UNIT_ID));
   const [idleIdx, setIdleIdx] = useState(0);
   const [activeIsA, setActiveIsA] = useState(true);
   const [reactionPath, setReactionPath] = useState<string | null>(null);
@@ -503,6 +521,44 @@ export default function ChatScreen() {
         // 권한 거부/시뮬레이터/iOS Expo Go 등에서 실패해도 무시
       }
     })();
+  }, []);
+
+  // 보상형 광고(한도 도달시 +3개) - 광고는 미리 로드해둬야 버튼 누른
+  // 즉시 뜬다. 보너스 지급은 반드시 EARNED_REWARD 콜백 안에서만 호출해서,
+  // 광고를 끝까지 안 보고 중간에 닫으면 보너스가 안 나가게 한다.
+  useEffect(() => {
+    const ad = rewardedAdRef.current;
+
+    const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      setAdReady(true);
+    });
+    const unsubEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, async () => {
+      try {
+        await watchAdBonus();
+        setAdBonusOffer(false);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setError(`Couldn't grant the bonus right now. (${detail})`);
+      }
+    });
+    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
+      setWatchingAd(false);
+      setAdReady(false);
+      ad.load(); // 다음 시청을 위해 바로 다시 로드해둔다
+    });
+    const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
+      setWatchingAd(false);
+      setAdReady(false);
+    });
+
+    ad.load();
+
+    return () => {
+      unsubLoaded();
+      unsubEarned();
+      unsubClosed();
+      unsubError();
+    };
   }, []);
 
   async function handlePickUserPhoto() {
@@ -859,22 +915,18 @@ export default function ChatScreen() {
     }
   }
 
-  async function handleWatchAdBonus() {
-    setWatchingAd(true);
-    setError(null);
-    try {
-      // TODO: 실제 보상형 광고 SDK(예: AdMob RewardedAd) 연동 지점.
-      // 지금은 placeholder라 바로 호출하지만, 실제로는 광고 SDK의
-      // "보상 지급" 콜백(예: onUserEarnedReward) 안에서만 watchAdBonus()를
-      // 호출해야 한다 - 광고를 끝까지 안 봐도 보너스가 나가면 안 되니까.
-      await watchAdBonus();
-      setAdBonusOffer(false);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setError(`Couldn't grant the bonus right now. (${detail})`);
-    } finally {
-      setWatchingAd(false);
+  function handleWatchAdBonus() {
+    if (!adReady) {
+      setError("Ad isn't ready yet - give it a few seconds and try again.");
+      return;
     }
+    setError(null);
+    setWatchingAd(true);
+    rewardedAdRef.current.show();
+    // setWatchingAd(false)와 다음 광고 재로드는 위쪽 CLOSED 리스너가 처리한다.
+    // 보너스 지급(watchAdBonus 호출)은 EARNED_REWARD 리스너가 처리한다 -
+    // 광고를 끝까지 안 보고 닫으면 CLOSED만 뜨고 EARNED_REWARD는 안 떠서
+    // 보너스가 안 나간다.
   }
 
   const currentEmotion = reactionPath ? emotionFromPath(reactionPath) : IDLE_EMOTIONS[idleIdx];
@@ -1220,13 +1272,19 @@ export default function ChatScreen() {
         {adBonusOffer && (
           <Pressable
             onPress={handleWatchAdBonus}
-            disabled={watchingAd}
-            style={({ pressed }) => [styles.adBonusButton, pressed && styles.adBonusButtonPressed]}
+            disabled={watchingAd || !adReady}
+            style={({ pressed }) => [
+              styles.adBonusButton,
+              (!adReady || watchingAd) && styles.adBonusButtonDisabled,
+              pressed && adReady && styles.adBonusButtonPressed,
+            ]}
           >
             {watchingAd ? (
               <ActivityIndicator color={colors.background} />
             ) : (
-              <Text style={styles.adBonusButtonText}>📺 Watch an ad for +3 messages</Text>
+              <Text style={styles.adBonusButtonText}>
+                {adReady ? "📺 Watch an ad for +3 messages" : "Loading ad..."}
+              </Text>
             )}
           </Pressable>
         )}
@@ -1758,6 +1816,9 @@ const styles = StyleSheet.create({
   },
   adBonusButtonPressed: {
     backgroundColor: colors.accentDark,
+  },
+  adBonusButtonDisabled: {
+    opacity: 0.5,
   },
   adBonusButtonText: {
     color: colors.background,
