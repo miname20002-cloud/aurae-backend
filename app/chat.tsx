@@ -202,31 +202,47 @@ function Sparkle({
   );
 }
 
-// 💗/🔥 헤더 게이지바 - 뱃지 아이콘 + 채워지는 트랙. progressPct는 0-100으로
-// 클램프해서 백엔드 값이 살짝 범위를 벗어나도 안전하게 렌더링한다.
+// 💗/🔥 헤더 게이지바 - 뱃지 아이콘 + 칸(segment) 단위로 채워지는 트랙.
+// 마지막으로 채워진 칸에만 글로우를 줘서 "거의 다 찼다"는 임박감을 만든다.
 function Gauge({
   icon,
   color,
-  progressPct,
+  segments,
+  filled,
   label,
 }: {
   icon: string;
   color: string;
-  progressPct: number;
+  segments: number;
+  filled: number;
   label: string;
 }) {
-  const clamped = Math.max(0, Math.min(100, progressPct));
+  const safeSegments = Math.max(1, Math.round(segments));
+  const safeFilled = Math.max(0, Math.min(safeSegments, Math.round(filled)));
   return (
     <View style={styles.gaugeRow}>
       <View style={[styles.gaugeBadge, { backgroundColor: color }]}>
         <Text style={styles.gaugeBadgeIcon}>{icon}</Text>
       </View>
       <View style={styles.gaugeTrack}>
-        <View style={[styles.gaugeFill, { width: `${clamped}%`, backgroundColor: color }]} />
-        <Text style={styles.gaugeLabel} numberOfLines={1}>
-          {label}
-        </Text>
+        {Array.from({ length: safeSegments }, (_, i) => {
+          const isFilled = i < safeFilled;
+          const isLastFilled = isFilled && i === safeFilled - 1;
+          return (
+            <View
+              key={i}
+              style={[
+                styles.gaugeSegment,
+                isFilled && { backgroundColor: color },
+                isLastFilled && [styles.gaugeSegmentGlow, { shadowColor: color }],
+              ]}
+            />
+          );
+        })}
       </View>
+      <Text style={styles.gaugeLabel} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -281,8 +297,9 @@ export default function ChatScreen() {
   const [levelUpToast, setLevelUpToast] = useState<{ newLevel: number; levelName: string } | null>(null);
   const levelUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // --- streak gauge fill (0-100% within current milestone bracket) ---
-  const [streakProgressPct, setStreakProgressPct] = useState(0);
+  // --- streak gauge fill (segment count = next_milestone - prev_milestone) ---
+  const [streakPrevMilestone, setStreakPrevMilestone] = useState(0);
+  const [streakNextMilestone, setStreakNextMilestone] = useState<number | null>(3);
 
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
@@ -383,7 +400,8 @@ export default function ChatScreen() {
       try {
         const [state, themeData] = await Promise.all([getRewardsState(), getThemes()]);
         setCurrentStreak(state.current_streak);
-        if (typeof state.progress_pct === "number") setStreakProgressPct(state.progress_pct);
+        if (typeof state.prev_milestone === "number") setStreakPrevMilestone(state.prev_milestone);
+        if (state.next_milestone !== undefined) setStreakNextMilestone(state.next_milestone);
         setActiveThemeId(themeData.active_theme);
         setThemes(themeData.themes);
 
@@ -652,8 +670,11 @@ export default function ChatScreen() {
 
       if (result.streak) {
         setCurrentStreak(result.streak.current_streak);
-        if (typeof result.streak.progress_pct === "number") {
-          setStreakProgressPct(result.streak.progress_pct);
+        if (typeof result.streak.prev_milestone === "number") {
+          setStreakPrevMilestone(result.streak.prev_milestone);
+        }
+        if (result.streak.next_milestone !== undefined) {
+          setStreakNextMilestone(result.streak.next_milestone);
         }
 
         if (result.streak.milestone_hit) {
@@ -849,13 +870,21 @@ export default function ChatScreen() {
                 <Gauge
                   icon="♥"
                   color="#FF8FAB"
-                  progressPct={relationshipProgressPct}
+                  segments={3}
+                  filled={Math.round((relationshipProgressPct / 100) * 3)}
                   label={`Lv.${relationshipLevel}`}
                 />
                 <Gauge
                   icon="🔥"
                   color="#FFB84D"
-                  progressPct={streakProgressPct}
+                  segments={
+                    streakNextMilestone != null ? streakNextMilestone - streakPrevMilestone : 1
+                  }
+                  filled={
+                    streakNextMilestone != null
+                      ? currentStreak - streakPrevMilestone
+                      : 1
+                  }
                   label={`${currentStreak}`}
                 />
               </View>
@@ -1201,6 +1230,7 @@ const styles = StyleSheet.create({
   gaugeRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
   },
   gaugeBadge: {
     width: 22,
@@ -1218,29 +1248,33 @@ const styles = StyleSheet.create({
     color: "#1A1014",
   },
   gaugeTrack: {
-    width: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
     height: 18,
     borderRadius: 9,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: "hidden",
-    justifyContent: "center",
-    paddingLeft: 11,
+    paddingLeft: 13,
+    paddingRight: 5,
   },
-  gaugeFill: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 9,
-    opacity: 0.55,
+  gaugeSegment: {
+    width: 7,
+    height: 11,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  gaugeSegmentGlow: {
+    shadowOpacity: 0.95,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   gaugeLabel: {
     fontSize: 10,
     fontWeight: "700",
     color: colors.textPrimary,
-    zIndex: 1,
   },
   themeButtonInline: {
     paddingHorizontal: 4,
