@@ -77,11 +77,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
   },
   content: {
-    flex: 1,
+    flex: 1.6,
     justifyContent: "center",
   },
   title: {
@@ -128,8 +127,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bottom: {
-    paddingBottom: spacing.xl,
+    flex: 1,
     alignItems: "center",
+    paddingTop: spacing.xl,
   },
   cta: {
     backgroundColor: colors.accent,
