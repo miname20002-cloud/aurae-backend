@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   topSection: {
-    flex: 1.6,
+    flex: 2.2,
     justifyContent: "center",
     alignItems: "center",
   },

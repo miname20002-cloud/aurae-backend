@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   content: {
-    flex: 1.6,
+    flex: 2.2,
     justifyContent: "center",
   },
   title: {
