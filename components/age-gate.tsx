@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import Screen from "@/components/Screen";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 
@@ -17,7 +17,7 @@ export default function AgeGate() {
   }
 
   return (
-    <Screen style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Before we connect</Text>
         <Text style={styles.body}>
@@ -69,7 +69,7 @@ export default function AgeGate() {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
       </View>
-    </Screen>
+    </SafeAreaView>
   );
 }
 
@@ -77,11 +77,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
   },
   content: {
-    flex: 1,
+    flex: 1.6,
     justifyContent: "center",
   },
   title: {
@@ -128,8 +127,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bottom: {
-    paddingBottom: spacing.xl,
+    flex: 1,
     alignItems: "center",
+    paddingTop: spacing.xl,
   },
   cta: {
     backgroundColor: colors.accent,
