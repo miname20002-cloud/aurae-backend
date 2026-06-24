@@ -329,15 +329,12 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     system_prompt = _build_system_prompt(persona, profile, turn_mood, None, True, user.name)
 
     opener_instruction = (
-        "This is the very start of your first conversation with them - they haven't said "
+        f"This is the very start of your first conversation with {user.name} - they haven't said "
         "anything yet, this is your chance to message first. Open with a short, punchy, "
-        "attention-grabbing line that matches your personality and immediately makes this feel "
-        "different from a generic AI chatbot greeting. Be specific and a little surprising, not "
-        "generic small talk like 'how can I help you today.' Somewhere in this opener, in your "
-        "own voice and personality rather than stating it flatly, let them know you want this to "
-        "be a genuine, honest space between just the two of you going forward - not performative, "
-        "not generic. Use their name naturally if it fits, but don't ask what it is - you already "
-        "know it."
+        "attention-grabbing line that *shows* your personality instead of *telling* them about it. "
+        "Skip any 'proving you're real' or 'I'm genuine' disclaimers—just be yourself from the jump. "
+        "Be specific and a little surprising, not generic small talk like 'how can I help you today.' "
+        "Use their name naturally if it fits. This one message sets the tone for everything, so make it good."
     )
     history = [{"role": "user", "content": opener_instruction}]
 
