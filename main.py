@@ -37,6 +37,25 @@ def get_real_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def get_db():
+    """
+    FastAPI dependency that yields a DB session and guarantees it gets
+    closed after the request, success or failure. Every endpoint below
+    used to call `session = get_session(engine)` directly and never close
+    it - that silently leaked a connection per request. SQLAlchemy's
+    default pool (pool_size=5, max_overflow=10) only allows 15 connections
+    total, so the 16th concurrent request would hang for 30s waiting for
+    one to free up, then raise QueuePool TimeoutError. Use
+    `session = Depends(get_db)` in every endpoint instead of calling
+    get_session(engine) directly.
+    """
+    session = get_session(engine)
+    try:
+        yield session
+    finally:
+        session.close()
+
+
 limiter = Limiter(key_func=get_real_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -144,10 +163,13 @@ class RefreshRequest(BaseModel):
 
 
 @app.post("/debug/set-tier")
-def debug_set_tier(req: SetTierRequest, current_user_id: int = Depends(auth.get_current_user_id)):
+def debug_set_tier(
+    req: SetTierRequest,
+    current_user_id: int = Depends(auth.get_current_user_id),
+    session=Depends(get_db),
+):
     if req.tier not in ("free", "premium", "vvip"):
         raise HTTPException(status_code=400, detail="tier must be 'free', 'premium', or 'vvip'.")
-    session = get_session(engine)
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -172,7 +194,7 @@ def debug_db_info():
 
 
 @app.post("/rewards/ad-bonus")
-def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id)):
+def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id), session=Depends(get_db)):
     """
     Free-tier users who've hit today's message cap can watch a rewarded ad
     to unlock a few more messages right then - this is the actual
@@ -189,7 +211,6 @@ def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id)):
     without a signed ad-network server callback (most mediation SDKs offer
     one - wire that in before shipping if abuse becomes a real problem).
     """
-    session = get_session(engine)
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -218,7 +239,7 @@ def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id)):
 
 
 @app.get("/admin/users/{user_id}/messages")
-def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None)):
+def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None), session=Depends(get_db)):
     """
     분쟁 대응용 - 유저가 가짜 스크린샷/조작된 대화로 모함할 경우, 실제
     서버에 저장된 원본 대화 기록(타임스탬프 포함)을 대조 확인하기 위한
@@ -228,7 +249,6 @@ def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None)):
     if not ADMIN_API_KEY or x_admin_key != ADMIN_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden.")
 
-    session = get_session(engine)
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -259,8 +279,7 @@ def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None)):
 
 @app.post("/signup")
 @limiter.limit("5/minute")
-def signup(req: SignupRequest, request: Request):
-    session = get_session(engine)
+def signup(req: SignupRequest, request: Request, session=Depends(get_db)):
 
     # This device already has an account - reconnect to it instead of creating
     # a duplicate, and skip all the fresh-signup validation below entirely
@@ -316,8 +335,7 @@ def signup(req: SignupRequest, request: Request):
 
 @app.post("/auth/refresh")
 @limiter.limit("20/minute")
-def refresh_token_endpoint(req: RefreshRequest, request: Request):
-    session = get_session(engine)
+def refresh_token_endpoint(req: RefreshRequest, request: Request, session=Depends(get_db)):
     user = session.get(User, req.user_id)
     if not user or not user.refresh_token_hash:
         raise HTTPException(status_code=401, detail="Invalid refresh request.")
@@ -341,8 +359,7 @@ def refresh_token_endpoint(req: RefreshRequest, request: Request):
 
 
 @app.get("/chat/history")
-def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
-    session = get_session(engine)
+def chat_history(current_user_id: int = Depends(auth.get_current_user_id), session=Depends(get_db)):
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -448,7 +465,7 @@ def _build_system_prompt(
 
 
 @app.post("/chat/greeting")
-def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
+def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id), session=Depends(get_db)):
     """
     Generates the character's proactive opening line right after signup,
     before the user has typed anything. Only works once - if any messages
@@ -458,7 +475,6 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
     instead of a regular emotion-reaction clip, since this is meant to be a
     one-time attention-grabbing moment rather than a reactive expression.
     """
-    session = get_session(engine)
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -508,8 +524,11 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
 
 
 @app.post("/chat")
-def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_id)):
-    session = get_session(engine)
+def chat(
+    req: ChatRequest,
+    current_user_id: int = Depends(auth.get_current_user_id),
+    session=Depends(get_db),
+):
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")

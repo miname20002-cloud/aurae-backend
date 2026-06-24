@@ -28,6 +28,16 @@ router = APIRouter(prefix="/rewards", tags=["rewards"])
 
 engine = get_engine(os.environ.get("DATABASE_URL", "sqlite:///aurae.db"))
 
+
+def get_db():
+    """Same leak-fix pattern as main.py's get_db - see that docstring.
+    rewards.py has its own `engine`, so it needs its own copy."""
+    session = get_session(engine)
+    try:
+        yield session
+    finally:
+        session.close()
+
 MILESTONE_REWARDS = {7: 20, 30: 100, 100: 500}  # streak day -> bonus reward_points
 BONUS_CHANCE = 0.12          # chance per message that a surprise bonus fires
 BONUS_POINTS = 5
@@ -142,8 +152,11 @@ class ShareRequest(BaseModel):
 
 
 @router.post("/share")
-def log_share(req: ShareRequest, current_user_id: int = Depends(auth.get_current_user_id)):
-    session = get_session(engine)
+def log_share(
+    req: ShareRequest,
+    current_user_id: int = Depends(auth.get_current_user_id),
+    session=Depends(get_db),
+):
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -169,8 +182,7 @@ class SetThemeRequest(BaseModel):
 
 
 @router.get("/themes")
-def list_themes(current_user_id: int = Depends(auth.get_current_user_id)):
-    session = get_session(engine)
+def list_themes(current_user_id: int = Depends(auth.get_current_user_id), session=Depends(get_db)):
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -185,10 +197,13 @@ def list_themes(current_user_id: int = Depends(auth.get_current_user_id)):
 
 
 @router.post("/theme")
-def set_theme(req: SetThemeRequest, current_user_id: int = Depends(auth.get_current_user_id)):
+def set_theme(
+    req: SetThemeRequest,
+    current_user_id: int = Depends(auth.get_current_user_id),
+    session=Depends(get_db),
+):
     if req.theme_id not in THEMES:
         raise HTTPException(status_code=400, detail="Unknown theme_id.")
-    session = get_session(engine)
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -201,8 +216,7 @@ def set_theme(req: SetThemeRequest, current_user_id: int = Depends(auth.get_curr
 
 
 @router.get("/state")
-def rewards_state(current_user_id: int = Depends(auth.get_current_user_id)):
-    session = get_session(engine)
+def rewards_state(current_user_id: int = Depends(auth.get_current_user_id), session=Depends(get_db)):
     user = session.get(User, current_user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
