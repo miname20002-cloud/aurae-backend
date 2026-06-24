@@ -202,6 +202,35 @@ function Sparkle({
   );
 }
 
+// 💗/🔥 헤더 게이지바 - 뱃지 아이콘 + 채워지는 트랙. progressPct는 0-100으로
+// 클램프해서 백엔드 값이 살짝 범위를 벗어나도 안전하게 렌더링한다.
+function Gauge({
+  icon,
+  color,
+  progressPct,
+  label,
+}: {
+  icon: string;
+  color: string;
+  progressPct: number;
+  label: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, progressPct));
+  return (
+    <View style={styles.gaugeRow}>
+      <View style={[styles.gaugeBadge, { backgroundColor: color }]}>
+        <Text style={styles.gaugeBadgeIcon}>{icon}</Text>
+      </View>
+      <View style={styles.gaugeTrack}>
+        <View style={[styles.gaugeFill, { width: `${clamped}%`, backgroundColor: color }]} />
+        <Text style={styles.gaugeLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function ChatScreen() {
   const { companion: companionName } = useLocalSearchParams<{
     userId: string;
@@ -248,8 +277,12 @@ export default function ChatScreen() {
   // --- relationship level (badge + level-up toast) ---
   const [relationshipLevel, setRelationshipLevel] = useState(1);
   const [relationshipLevelName, setRelationshipLevelName] = useState("Just Met");
+  const [relationshipProgressPct, setRelationshipProgressPct] = useState(0);
   const [levelUpToast, setLevelUpToast] = useState<{ newLevel: number; levelName: string } | null>(null);
   const levelUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // --- streak gauge fill (0-100% within current milestone bracket) ---
+  const [streakProgressPct, setStreakProgressPct] = useState(0);
 
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
@@ -350,6 +383,7 @@ export default function ChatScreen() {
       try {
         const [state, themeData] = await Promise.all([getRewardsState(), getThemes()]);
         setCurrentStreak(state.current_streak);
+        if (typeof state.progress_pct === "number") setStreakProgressPct(state.progress_pct);
         setActiveThemeId(themeData.active_theme);
         setThemes(themeData.themes);
 
@@ -456,6 +490,9 @@ export default function ChatScreen() {
         const history = await getChatHistory();
         if (history.relationship_level) setRelationshipLevel(history.relationship_level);
         if (history.relationship_level_name) setRelationshipLevelName(history.relationship_level_name);
+        if (typeof history.relationship_progress_pct === "number") {
+          setRelationshipProgressPct(history.relationship_progress_pct);
+        }
 
         if (history.messages.length > 0) {
           setMessages(
@@ -503,6 +540,9 @@ export default function ChatScreen() {
               const greeting = await greetingPromise;
               if (greeting.relationship_level) setRelationshipLevel(greeting.relationship_level);
               if (greeting.relationship_level_name) setRelationshipLevelName(greeting.relationship_level_name);
+              if (typeof greeting.relationship_progress_pct === "number") {
+                setRelationshipProgressPct(greeting.relationship_progress_pct);
+              }
 
               // 진동으로만 "끝났다"는 신호를 주고, 시각 효과(스파클)는
               // 안 보인다는 피드백을 받아서 제거함.
@@ -602,6 +642,9 @@ export default function ChatScreen() {
       if (typeof result.relationship_level === "number") {
         setRelationshipLevel(result.relationship_level);
       }
+      if (typeof result.relationship_progress_pct === "number") {
+        setRelationshipProgressPct(result.relationship_progress_pct);
+      }
       if (result.relationship_level_up) {
         setRelationshipLevelName(result.relationship_level_up.level_name);
         showLevelUpToast(result.relationship_level_up.new_level, result.relationship_level_up.level_name);
@@ -609,6 +652,9 @@ export default function ChatScreen() {
 
       if (result.streak) {
         setCurrentStreak(result.streak.current_streak);
+        if (typeof result.streak.progress_pct === "number") {
+          setStreakProgressPct(result.streak.progress_pct);
+        }
 
         if (result.streak.milestone_hit) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -798,9 +844,21 @@ export default function ChatScreen() {
           </View>
 
           <View style={styles.headerCenter}>
-            <View style={styles.statsRow}>
-              {relationshipLevel > 0 && <Text style={styles.levelText}>💗{relationshipLevel}</Text>}
-              {currentStreak > 0 && <Text style={styles.streakText}>🔥{currentStreak}</Text>}
+            <View style={styles.centerRow}>
+              <View style={styles.gaugeStack}>
+                <Gauge
+                  icon="♥"
+                  color="#FF8FAB"
+                  progressPct={relationshipProgressPct}
+                  label={`Lv.${relationshipLevel}`}
+                />
+                <Gauge
+                  icon="🔥"
+                  color="#FFB84D"
+                  progressPct={streakProgressPct}
+                  label={`${currentStreak}`}
+                />
+              </View>
               <Pressable onPress={handleOpenThemeModal} style={styles.themeButtonInline}>
                 <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
                   <Text style={styles.themeButtonText}>🎨</Text>
@@ -1050,7 +1108,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 60,
+    paddingTop: 40,
   },
   avatarStack: {
     width: 104,
@@ -1132,20 +1190,57 @@ const styles = StyleSheet.create({
   userPhotoHintText: {
     fontSize: 11,
   },
-  statsRow: {
+  centerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  levelText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FF8FAB",
+  gaugeStack: {
+    gap: 6,
   },
-  streakText: {
-    fontSize: 13,
+  gaugeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  gaugeBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: -7,
+    zIndex: 2,
+    borderWidth: 2,
+    borderColor: colors.background,
+  },
+  gaugeBadgeIcon: {
+    fontSize: 11,
+    color: "#1A1014",
+  },
+  gaugeTrack: {
+    width: 76,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    justifyContent: "center",
+    paddingLeft: 11,
+  },
+  gaugeFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 9,
+    opacity: 0.55,
+  },
+  gaugeLabel: {
+    fontSize: 10,
     fontWeight: "700",
-    color: "#FFB84D",
+    color: colors.textPrimary,
+    zIndex: 1,
   },
   themeButtonInline: {
     paddingHorizontal: 4,

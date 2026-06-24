@@ -64,6 +64,10 @@ export type StreakInfo = {
   longest_streak: number;
   streak_freezes: number;
   milestone_hit: number | null;
+  // 🔥 게이지바용 - 현재 구간(prev_milestone~next_milestone) 안에서 진행률
+  prev_milestone?: number;
+  next_milestone?: number | null;
+  progress_pct?: number;
 };
 
 export type BonusInfo = {
@@ -86,6 +90,8 @@ export type ChatResponse = {
   streak?: StreakInfo;
   bonus?: BonusInfo | null;
   relationship_level?: number;
+  // 💗 게이지바용 - 다음 레벨까지 진행률 (0-100)
+  relationship_progress_pct?: number;
   relationship_level_up?: RelationshipLevelUp | null;
 };
 
@@ -95,6 +101,7 @@ export type GreetingResponse = {
   asset_path: string;
   relationship_level?: number;
   relationship_level_name?: string;
+  relationship_progress_pct?: number;
 };
 
 export type ChatHistoryItem = {
@@ -107,6 +114,7 @@ export type ChatHistoryResponse = {
   asset_path: string | null;
   relationship_level?: number;
   relationship_level_name?: string;
+  relationship_progress_pct?: number;
 };
 
 export type RewardsState = {
@@ -115,6 +123,9 @@ export type RewardsState = {
   streak_freezes: number;
   reward_points: number;
   chat_theme: string;
+  prev_milestone?: number;
+  next_milestone?: number | null;
+  progress_pct?: number;
 };
 
 export type ThemeInfo = {
