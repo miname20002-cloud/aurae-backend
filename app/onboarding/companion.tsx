@@ -54,10 +54,12 @@ export default function CompanionScreen() {
               disabled={loading}
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
-              <Image 
-                source={{ uri: assetUrl(companion.facePath) }}
-                style={styles.avatarImage}
-              />
+              <View style={[styles.avatarWrapper, { borderColor: companion.accent }]}>
+                <Image 
+                  source={{ uri: assetUrl(companion.facePath) }}
+                  style={styles.avatarImage}
+                />
+              </View>
               <Text style={styles.optionText}>{companion.name}</Text>
             </Pressable>
           ))}
@@ -115,10 +117,20 @@ const styles = StyleSheet.create({
   optionPressed: {
     borderColor: colors.accent,
   },
+  avatarWrapper: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    padding: 2,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.background,
+  },
   avatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   optionText: {
     fontSize: 16,
