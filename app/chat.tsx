@@ -14,6 +14,7 @@ import {
   Share,
   Modal,
   Image,
+  Dimensions,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
@@ -28,6 +29,8 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import { useFonts } from "expo-font";
+import { Fredoka_600SemiBold, Fredoka_700Bold } from "@expo-google-fonts/fredoka";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
@@ -59,17 +62,10 @@ const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
 const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
 const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
 const INTRO_FADE_OUT_MS = 600; // smooth fade duration as the intro overlay dissolves into the revealed chat UI
-
-// 가입 직후 첫 입장 코치마크 - 카툰 말풍선으로 핵심 기능 3개를 순서대로 짚어준다.
-// 1회만 자동 노출, AsyncStorage 플래그로 기억한다.
-const COACH_STEPS: { text: string }[] = [
-  { text: "tap me anytime to replay my intro 🎬" },
-  { text: "💗 relationship & 🔥 streak — keep these glowing every day" },
-  { text: "say anything, I'm listening 👂" },
-];
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -319,6 +315,10 @@ export default function ChatScreen() {
   const avatarWrapRef = useRef<View>(null);
   const gaugeStackRef = useRef<View>(null);
   const inputRowRef = useRef<View>(null);
+  const userAvatarRef = useRef<View>(null);
+  const firstBubbleRef = useRef<View>(null);
+
+  const [fontsLoaded] = useFonts({ Fredoka_600SemiBold, Fredoka_700Bold });
 
   function measureCoachTarget(ref: React.RefObject<View>) {
     // measureInWindow needs the target to have actually painted - retry once
@@ -338,7 +338,20 @@ export default function ChatScreen() {
     if (coachStep === 1) measureCoachTarget(avatarWrapRef);
     else if (coachStep === 2) measureCoachTarget(gaugeStackRef);
     else if (coachStep === 3) measureCoachTarget(inputRowRef);
+    else if (coachStep === 4) measureCoachTarget(userAvatarRef);
+    else if (coachStep === 5) measureCoachTarget(firstBubbleRef);
   }, [coachStep]);
+
+  // 안전장치: 타겟 ref가 아직 화면에 안 올라와서(예: 메시지 리스트가 막 그려지는
+  // 타이밍) 측정이 끝까지 실패하면, 그 단계에서 멈춰버리지 않게 자동으로
+  // 다음 단계로 넘어간다.
+  useEffect(() => {
+    if (coachStep === 0) return;
+    const timer = setTimeout(() => {
+      if (!coachTarget) advanceCoachMarks();
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [coachStep, coachTarget]);
 
   function startCoachMarksIfFirstTime() {
     AsyncStorage.getItem(COACH_MARKS_SEEN_KEY)
@@ -357,7 +370,7 @@ export default function ChatScreen() {
   }
 
   function advanceCoachMarks() {
-    if (coachStep < COACH_STEPS.length) {
+    if (coachStep < coachSteps.length) {
       setCoachStep((s) => s + 1);
     } else {
       dismissCoachMarks();
@@ -375,6 +388,17 @@ export default function ChatScreen() {
   const bgColor = activeTheme?.bg ?? colors.background;
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
   const userGlowColor = complementaryColor(companion?.accent ?? "#7C8CFF");
+
+  // 가입 직후 첫 입장 코치마크 - 카툰 말풍선으로 핵심 기능 4개를 순서대로 짚어준다.
+  // 각 단계의 하이라이트 색을 그 기능이 실제로 쓰는 색과 맞춰서 "이 색=이 기능"
+  // 감각적 연결이 생기게 한다. 1회만 자동 노출, AsyncStorage 플래그로 기억한다.
+  const coachSteps = [
+    { text: "tap me anytime to replay my intro 🎬", color: companion?.accent ?? "#8B7CF6" },
+    { text: "💗 relationship & 🔥 streak — keep these glowing every day", color: "#FF8FAB" },
+    { text: "say anything, I'm listening 👂", color: colors.accent },
+    { text: "add your photo so it feels more like you 📸", color: userGlowColor },
+    { text: "long press any message to share it 📤", color: "#39E6FF" },
+  ];
 
   const breath = useSharedValue(0.4);
   useEffect(() => {
@@ -837,7 +861,10 @@ export default function ChatScreen() {
                 top: coachTarget.y - 6,
                 width: coachTarget.width + 12,
                 height: coachTarget.height + 12,
-                borderRadius: coachStep === 1 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
+                borderRadius:
+                  coachStep === 1 || coachStep === 4 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
+                borderColor: coachSteps[coachStep - 1].color,
+                shadowColor: coachSteps[coachStep - 1].color,
               },
             ]}
             pointerEvents="none"
@@ -845,23 +872,39 @@ export default function ChatScreen() {
           <View
             style={[
               styles.coachBubble,
-              coachStep === 3
-                ? { top: Math.max(70, coachTarget.y - 130) }
+              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+                ? { top: Math.max(70, coachTarget.y - 140) }
                 : { top: coachTarget.y + coachTarget.height + 24 },
             ]}
             pointerEvents="none"
           >
-            <Text style={styles.coachBubbleText}>{COACH_STEPS[coachStep - 1].text}</Text>
+            <Text
+              style={[
+                styles.coachBubbleText,
+                fontsLoaded && { fontFamily: "Fredoka_700Bold" },
+              ]}
+            >
+              {coachSteps[coachStep - 1].text}
+            </Text>
             <View style={styles.coachDots}>
-              {COACH_STEPS.map((_, i) => (
-                <View key={i} style={[styles.coachDot, i === coachStep - 1 && styles.coachDotActive]} />
+              {coachSteps.map((step, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.coachDot,
+                    i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
+                  ]}
+                />
               ))}
             </View>
           </View>
           <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
-            <Text style={styles.coachSkipText}>skip</Text>
+            <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>skip</Text>
           </Pressable>
-          <Text style={styles.coachTapHint} pointerEvents="none">
+          <Text
+            style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}
+            pointerEvents="none"
+          >
             tap anywhere to continue
           </Text>
         </View>
@@ -1016,7 +1059,7 @@ export default function ChatScreen() {
           </View>
 
           <View style={styles.headerSide}>
-            <Pressable onPress={handlePickUserPhoto} style={styles.userAvatarStack}>
+            <Pressable onPress={handlePickUserPhoto} style={styles.userAvatarStack} ref={userAvatarRef}>
               <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
                 <Svg width={104} height={104} viewBox="0 0 104 104">
                   <Defs>
@@ -1056,8 +1099,9 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <Pressable
+              ref={index === 0 ? firstBubbleRef : undefined}
               onLongPress={() => handleShareBubble(item.text)}
               style={[
                 styles.bubble,
@@ -1419,19 +1463,19 @@ const styles = StyleSheet.create({
   },
   userPhotoHint: {
     position: "absolute",
-    bottom: 14,
-    right: 12,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    bottom: 10,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   userPhotoHintText: {
-    fontSize: 11,
+    fontSize: 15,
   },
   centerRow: {
     flexDirection: "row",

@@ -18,7 +18,8 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-video"
+      "expo-video",
+      "expo-font"
     ]
   }
 }
