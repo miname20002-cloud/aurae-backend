@@ -2,8 +2,10 @@ import json
 import os
 import re
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel
 
 from datetime import date, datetime, timedelta
@@ -20,6 +22,24 @@ import safety
 from db import User, ChatMessage, UserInsightProfile, get_engine, get_session
 
 app = FastAPI(title="Aurae")
+
+
+def get_real_ip(request: Request) -> str:
+    """
+    Render sits behind a reverse proxy, so request.client.host is the
+    proxy's IP, not the real client's. Render forwards the real IP in
+    X-Forwarded-For - read that first, falling back to request.client.host
+    for local/non-proxied runs (e.g. tests).
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=get_real_ip)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json")))
 
@@ -238,7 +258,8 @@ def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None)):
 
 
 @app.post("/signup")
-def signup(req: SignupRequest):
+@limiter.limit("5/minute")
+def signup(req: SignupRequest, request: Request):
     session = get_session(engine)
 
     # This device already has an account - reconnect to it instead of creating
@@ -294,7 +315,8 @@ def signup(req: SignupRequest):
 
 
 @app.post("/auth/refresh")
-def refresh_token_endpoint(req: RefreshRequest):
+@limiter.limit("20/minute")
+def refresh_token_endpoint(req: RefreshRequest, request: Request):
     session = get_session(engine)
     user = session.get(User, req.user_id)
     if not user or not user.refresh_token_hash:
