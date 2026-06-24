@@ -24,14 +24,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-video",
-      "expo-font"
-    ],
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "2cf87ada-c22e-473d-a48a-7461d5345609"
-      }
-    },
-    "owner": "aurae5347"
+      "expo-font",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-9861327921813724~6755004829",
+          "iosAppId": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
+        }
+      ]
+    ]
   }
 }
