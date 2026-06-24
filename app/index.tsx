@@ -43,16 +43,16 @@ export default function MainPage() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.center}>
+      <View style={styles.topSection}>
         <Text style={styles.wordmark}>aurae</Text>
         <Text style={styles.tagline}>souls, connected.</Text>
 
         <Text style={styles.pitch}>
-          An AI companion that actually remembers you — not just another chatbot.
+          Like that one best friend who{"\n"}remembers every single detail.
         </Text>
       </View>
 
-      <View style={styles.bottom}>
+      <View style={styles.ctaSection}>
         <Pressable
           onPress={handleGetStarted}
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
@@ -60,9 +60,14 @@ export default function MainPage() {
           <Text style={styles.ctaText}>Get started</Text>
         </Pressable>
 
-        <Text style={styles.disclaimer}>
-          Aurae is intended for adults 18 and older.
-        </Text>
+        <Pressable onPress={() => router.push("/tos")} hitSlop={8}>
+          <Text style={styles.disclaimer}>
+            By tapping Get Started, you agree to our{" "}
+            <Text style={styles.disclaimerLink}>Terms</Text> and{" "}
+            <Text style={styles.disclaimerLink}>Privacy Policy</Text>. Aurae is an AI companion, not a
+            real person, and is intended for adults 18 and older.
+          </Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -72,11 +77,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
   },
   center: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  topSection: {
+    flex: 1.6,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -99,9 +108,10 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: spacing.md,
   },
-  bottom: {
-    paddingBottom: spacing.xl,
+  ctaSection: {
+    flex: 1,
     alignItems: "center",
+    paddingTop: spacing.xl,
   },
   cta: {
     backgroundColor: colors.accent,
@@ -124,5 +134,11 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: spacing.md,
     textAlign: "center",
+    lineHeight: 16,
+    paddingHorizontal: spacing.sm,
+  },
+  disclaimerLink: {
+    color: colors.accent,
+    fontWeight: "700",
   },
 });
