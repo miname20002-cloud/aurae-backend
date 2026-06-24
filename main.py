@@ -43,13 +43,23 @@ INSIGHT_REFRESH_INTERVAL = 6
 TRUST_MARKERS_PER_LEVEL = 3
 
 FREE_DAILY_MESSAGE_LIMIT = 25
-# Premium is marketed as "unlimited" - this cap is intentionally high enough
-# that no normal user will ever hit it. It exists purely as a cost safety
-# net against extreme outliers, given premium runs the more expensive Sonnet
-# model with no per-message API cost passed through to the user.
-PREMIUM_DAILY_MESSAGE_LIMIT = 300
+# Premium is marketed as "unlimited" - this cap is a sanity ceiling against
+# extreme abuse, not the real cost control (see PREMIUM_SONNET_DAILY_THRESHOLD
+# below for that). Tightened from 300 -> 150 after unit-economics review.
+PREMIUM_DAILY_MESSAGE_LIMIT = 150
+# After this many messages in a day, a premium user's remaining messages for
+# that day auto-downgrade from Sonnet to Haiku. This is the real cost lever -
+# the average premium user never notices (most days end well under this),
+# but it caps the worst-case cost of the heaviest users, who are exactly the
+# people most likely to actually hit a flat "unlimited" claim hard.
+PREMIUM_SONNET_DAILY_THRESHOLD = 30
+# VVIP never downgrades - this cap is purely an abuse backstop, not expected
+# to be hit in normal use. The economics here are carried by the higher price
+# point, not by usage throttling.
+VVIP_DAILY_MESSAGE_LIMIT = 1000
 FREE_TIER_REPLY_MODEL = claude_client.FAST_MODEL
 PREMIUM_TIER_REPLY_MODEL = claude_client.MODEL
+VVIP_TIER_REPLY_MODEL = claude_client.MODEL
 
 LIMIT_REACHED_REPLY = (
     "{name} smiles. \"hey, you've used up today's messages with me - I'll be right "
@@ -107,8 +117,8 @@ class RefreshRequest(BaseModel):
 
 @app.post("/debug/set-tier")
 def debug_set_tier(req: SetTierRequest, current_user_id: int = Depends(auth.get_current_user_id)):
-    if req.tier not in ("free", "premium"):
-        raise HTTPException(status_code=400, detail="tier must be 'free' or 'premium'.")
+    if req.tier not in ("free", "premium", "vvip"):
+        raise HTTPException(status_code=400, detail="tier must be 'free', 'premium', or 'vvip'.")
     session = get_session(engine)
     user = session.get(User, current_user_id)
     if not user:
@@ -383,7 +393,7 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
 
     persona = PERSONAS[user.companion_id]
     profile = session.get(UserInsightProfile, user.id)
-    reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
+    reply_model = FREE_TIER_REPLY_MODEL if user.tier == "free" else PREMIUM_TIER_REPLY_MODEL
 
     turn_mood = {"mood": "curious", "intensity": 3, "life_theme": "first meeting", "needs_realtime_info": False}
     system_prompt = _build_system_prompt(persona, profile, turn_mood, None, True, user.name)
@@ -458,9 +468,12 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         user.daily_message_count = 0
         session.commit()
 
-    daily_limit = PREMIUM_DAILY_MESSAGE_LIMIT if user.tier == "premium" else FREE_DAILY_MESSAGE_LIMIT
+    daily_limit = {
+        "vvip": VVIP_DAILY_MESSAGE_LIMIT,
+        "premium": PREMIUM_DAILY_MESSAGE_LIMIT,
+    }.get(user.tier, FREE_DAILY_MESSAGE_LIMIT)
     if user.daily_message_count >= daily_limit:
-        reply_template = PREMIUM_LIMIT_REACHED_REPLY if user.tier == "premium" else LIMIT_REACHED_REPLY
+        reply_template = PREMIUM_LIMIT_REACHED_REPLY if user.tier in ("premium", "vvip") else LIMIT_REACHED_REPLY
         reply = reply_template.format(name=persona["name"])
         asset_path = asset_map.resolve_asset(user.companion_id, "neutral", user.last_emotion_asset)
         return {
@@ -477,7 +490,23 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "relationship_level_up": None,
         }
 
-    reply_model = PREMIUM_TIER_REPLY_MODEL if user.tier == "premium" else FREE_TIER_REPLY_MODEL
+    if user.tier == "vvip":
+        # VVIP never downgrades - the higher price point carries the cost,
+        # not a usage throttle.
+        reply_model = VVIP_TIER_REPLY_MODEL
+    elif user.tier == "premium":
+        # Cost control lever: once a premium user crosses the daily Sonnet
+        # threshold, the rest of today's replies quietly downgrade to Haiku.
+        # Most premium users never notice this - they're well under the
+        # threshold on a typical day - but it caps the worst-case cost of
+        # the heaviest users instead of relying on price alone.
+        reply_model = (
+            PREMIUM_TIER_REPLY_MODEL
+            if user.daily_message_count < PREMIUM_SONNET_DAILY_THRESHOLD
+            else FREE_TIER_REPLY_MODEL
+        )
+    else:
+        reply_model = FREE_TIER_REPLY_MODEL
 
     is_first_turn = session.query(ChatMessage).filter(
         ChatMessage.user_id == user.id, ChatMessage.role == "user"
