@@ -2,8 +2,41 @@ import { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
+import Animated, { useSharedValue, useAnimatedProps, withRepeat, withTiming, Easing } from "react-native-reanimated";
 import { colors, spacing, radius } from "@/theme/colors";
 import { getSession } from "@/lib/session";
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// 화이트 단일색 글로우가 'a'부터 'e' 쪽으로 부드럽게 스윕하는 효과.
+// 왼쪽 끝/오른쪽 끝에서 투명해지도록(sin 곡선) 해서, 한 바퀴 끝나고
+// 다시 왼쪽에서 시작될 때 점프가 안 보이고 자연스럽게 반복된다.
+function AuroraGlow() {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withRepeat(withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.ease) }), -1, false);
+  }, []);
+
+  const sweepProps = useAnimatedProps(() => {
+    const cx = 10 + progress.value * 200; // 왼쪽(a 근처) -> 오른쪽(e 근처)
+    const fillOpacity = Math.sin(progress.value * Math.PI); // 0 -> 1 -> 0
+    return { cx, fillOpacity };
+  });
+
+  return (
+    <Svg width={220} height={120} viewBox="0 0 220 120" style={styles.auroraSvg}>
+      <Defs>
+        <RadialGradient id="auroraWhite" cx="50%" cy="50%" r="50%">
+          <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.9} />
+          <Stop offset="100%" stopColor="#FFFFFF" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <AnimatedCircle animatedProps={sweepProps} cy={60} r={60} fill="url(#auroraWhite)" />
+    </Svg>
+  );
+}
 
 export default function MainPage() {
   const router = useRouter();
@@ -44,7 +77,10 @@ export default function MainPage() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topSection}>
-        <Text style={styles.wordmark}>aurae</Text>
+        <View style={styles.wordmarkWrap}>
+          <AuroraGlow />
+          <Text style={styles.wordmark}>aurae</Text>
+        </View>
         <Text style={styles.tagline}>souls, connected.</Text>
 
         <Text style={styles.pitch}>
@@ -88,6 +124,15 @@ const styles = StyleSheet.create({
     flex: 1.6,
     justifyContent: "center",
     alignItems: "center",
+  },
+  wordmarkWrap: {
+    width: 220,
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  auroraSvg: {
+    position: "absolute",
   },
   wordmark: {
     fontSize: 40,
