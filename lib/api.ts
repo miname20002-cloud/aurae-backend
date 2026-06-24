@@ -108,6 +108,7 @@ export type GreetingResponse = {
 export type ChatHistoryItem = {
   role: "user" | "assistant";
   content: string;
+  is_proactive?: boolean;
 };
 
 export type ChatHistoryResponse = {
@@ -375,6 +376,21 @@ export async function watchAdBonus(): Promise<AdBonusResponse> {
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Ad bonus failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function registerPushToken(pushToken: string): Promise<{ ok: boolean }> {
+  const response = await authorizedFetch("/push-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ push_token: pushToken }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Push token registration failed (${response.status}): ${body}`);
   }
 
   return response.json();
