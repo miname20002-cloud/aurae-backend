@@ -29,6 +29,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
 import { useFonts } from "expo-font";
 import { Fredoka_600SemiBold, Fredoka_700Bold } from "@expo-google-fonts/fredoka";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -42,6 +43,7 @@ import {
   setChatTheme,
   sendShare,
   watchAdBonus,
+  registerPushToken,
   type ThemeInfo,
   type BonusInfo,
 } from "@/lib/api";
@@ -52,6 +54,7 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  isProactive?: boolean;
 };
 
 const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
@@ -473,6 +476,35 @@ export default function ChatScreen() {
     })();
   }, []);
 
+  // 푸시 알림 권한 요청 + Expo push token 발급/서버 등록.
+  // 실패해도(권한 거부, 시뮬레이터, iOS Expo Go의 원격푸시 미지원 등) 채팅
+  // 자체엔 영향 없게 조용히 무시한다 - send_reminders.py(스트릭 리마인더/
+  // 선제문자 cron)가 이 토큰으로 발송 대상을 찾는다.
+  useEffect(() => {
+    (async () => {
+      try {
+        if (Platform.OS === "android") {
+          await Notifications.setNotificationChannelAsync("default", {
+            name: "default",
+            importance: Notifications.AndroidImportance.DEFAULT,
+          });
+        }
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        if (finalStatus !== "granted") return;
+
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        await registerPushToken(tokenData.data);
+      } catch {
+        // 권한 거부/시뮬레이터/iOS Expo Go 등에서 실패해도 무시
+      }
+    })();
+  }, []);
+
   async function handlePickUserPhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -627,6 +659,7 @@ export default function ChatScreen() {
                 id: String(nextId.current),
                 role: m.role === "user" ? "user" : "assistant",
                 text: m.content,
+                isProactive: m.is_proactive,
               };
             })
           );
@@ -741,6 +774,17 @@ export default function ChatScreen() {
     const timeout = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true });
     }, 100);
+    return () => clearTimeout(timeout);
+  }, [messages]);
+
+  // 캐릭터가 먼저 보낸 메시지(선제문자)는 도착했을 때만 강조 풍선으로
+  // 보이고, 화면에서 몇 초간 보이면 일반 풍선으로 자동 원복된다 - "안 읽은
+  // 동안만 다르게 보인다"는 카톡식 동작을 화면 표시 자체로 대체한 것.
+  useEffect(() => {
+    if (!messages.some((m) => m.isProactive)) return;
+    const timeout = setTimeout(() => {
+      setMessages((prev) => prev.map((m) => (m.isProactive ? { ...m, isProactive: false } : m)));
+    }, 4000);
     return () => clearTimeout(timeout);
   }, [messages]);
 
@@ -1147,6 +1191,10 @@ export default function ChatScreen() {
                       companion?.accent && { backgroundColor: hexToRgba(companion.accent, 0.22) },
                     ]
                   : [styles.bubbleAssistant, { backgroundColor: assistantBubbleColor }],
+                item.isProactive && [
+                  styles.bubbleProactive,
+                  { borderColor: companion?.accent ?? colors.accent, shadowColor: companion?.accent ?? colors.accent },
+                ],
               ]}
             >
               <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
@@ -1675,6 +1723,13 @@ const styles = StyleSheet.create({
   bubbleAssistant: {
     alignSelf: "flex-start",
     backgroundColor: colors.surface,
+  },
+  bubbleProactive: {
+    borderWidth: 2,
+    shadowOpacity: 0.65,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
   },
   bubbleTextUser: {
     color: colors.textPrimary,

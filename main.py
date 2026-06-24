@@ -162,6 +162,10 @@ class RefreshRequest(BaseModel):
     device_id: str
 
 
+class PushTokenRequest(BaseModel):
+    push_token: str
+
+
 @app.post("/debug/set-tier")
 def debug_set_tier(
     req: SetTierRequest,
@@ -358,6 +362,26 @@ def refresh_token_endpoint(req: RefreshRequest, request: Request, session=Depend
     return {"access_token": new_access_token, "refresh_token": new_refresh_token}
 
 
+@app.post("/push-token")
+def register_push_token(
+    req: PushTokenRequest,
+    current_user_id: int = Depends(auth.get_current_user_id),
+    session=Depends(get_db),
+):
+    """
+    프론트에서 expo-notifications로 받은 Expo push token을 저장한다.
+    send_reminders.py(Render Cron Job)가 이 토큰으로 스트릭 리마인더/
+    선제문자를 보낸다. 토큰이 비어있으면(알림 권한 거부 등) 그냥 null로
+    저장해서, 해당 유저는 cron 조회 시 자동으로 제외된다.
+    """
+    user = session.get(User, current_user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    user.push_token = req.push_token or None
+    session.commit()
+    return {"ok": True}
+
+
 @app.get("/chat/history")
 def chat_history(current_user_id: int = Depends(auth.get_current_user_id), session=Depends(get_db)):
     user = session.get(User, current_user_id)
@@ -375,7 +399,7 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id), sessi
         .limit(40)
         .all()
     )
-    messages = [{"role": m.role, "content": m.content} for m in reversed(recent)]
+    messages = [{"role": m.role, "content": m.content, "is_proactive": m.is_proactive} for m in reversed(recent)]
 
     asset_path = None
     if user.last_emotion_asset and "_question." not in user.last_emotion_asset:

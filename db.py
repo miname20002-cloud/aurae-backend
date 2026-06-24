@@ -50,6 +50,9 @@ class User(Base):
     ad_bonus_date = Column(String, nullable=True)  # "YYYY-MM-DD", resets ad_bonus_count when it changes
     ad_bonus_count = Column(Integer, default=0, nullable=False)  # rewarded ads redeemed today, capped per day
 
+    # --- push notifications ---
+    push_token = Column(String, nullable=True)  # Expo push token, set via POST /push-token
+
     messages = relationship("ChatMessage", back_populates="user")
     insight_profile = relationship("UserInsightProfile", back_populates="user", uselist=False)
 class ChatMessage(Base):
@@ -59,6 +62,12 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # "user" or "assistant"
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # True only for messages the companion sent unprompted via the proactive-
+    # message cron job (send_reminders.py) - NOT for the normal /chat reply
+    # flow, and NOT for the one-time /chat/greeting opener (that already has
+    # its own dedicated intro-video moment). Drives the frontend's "this
+    # arrived while you were away" bubble highlight.
+    is_proactive = Column(Boolean, default=False, nullable=False)
     user = relationship("User", back_populates="messages")
 class UserInsightProfile(Base):
     __tablename__ = "user_insight_profiles"
