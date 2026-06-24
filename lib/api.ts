@@ -239,8 +239,7 @@ async function ensureValidToken(): Promise<string> {
     ageConfirmed: true,
     genderPreference: "female",
     companionId: session.companion.toLowerCase(),
-    initialTone: "unknown",
-  });
+     });
   return reconnected.access_token;
 }
 
