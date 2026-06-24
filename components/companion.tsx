@@ -1,22 +1,43 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import Screen from "@/components/Screen";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { companionsFor } from "@/lib/companions";
+import { signup } from "@/lib/api";
+import { saveSession } from "@/lib/session";
+import { useState } from "react";
 
 export default function CompanionScreen() {
   const router = useRouter();
-  const { genderPreference, setCompanionId } = useOnboarding();
+  const { name, genderPreference, setCompanionId } = useOnboarding();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Falls back to "female" if someone lands here directly without picking
-  // a gender first - keeps this screen from crashing rather than enforcing
-  // strict navigation order.
   const options = companionsFor(genderPreference ?? "female");
 
-  function choose(id: string) {
+  async function choose(id: string) {
     setCompanionId(id);
-    router.push("/onboarding/tone");
+    setError(null);
+    setLoading(true);
+
+    try {
+      // 성향타입 선택 스크린 스킵 - 바로 signup
+      const result = await signup({
+        name,
+        ageConfirmed: true,
+        genderPreference: genderPreference ?? "female",
+        companionId: id,
+      });
+      await saveSession({ userId: result.user_id, companion: result.companion, name });
+      router.replace({
+        pathname: "/chat",
+        params: { userId: String(result.user_id), companion: result.companion },
+      });
+    } catch (err) {
+      setError("Couldn't connect right now. Check your connection and try again.");
+      setLoading(false);
+    }
   }
 
   return (
@@ -30,6 +51,7 @@ export default function CompanionScreen() {
             <Pressable
               key={companion.id}
               onPress={() => choose(companion.id)}
+              disabled={loading}
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
               <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
@@ -39,10 +61,13 @@ export default function CompanionScreen() {
             </Pressable>
           ))}
         </View>
+
+        {loading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
+        {error && <Text style={styles.error}>{error}</Text>}
       </View>
 
       <View style={styles.bottom}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => router.back()} disabled={loading}>
           <Text style={styles.back}>← Back</Text>
         </Pressable>
       </View>
@@ -105,6 +130,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: colors.textPrimary,
+  },
+  spinner: {
+    marginTop: spacing.lg,
+  },
+  error: {
+    marginTop: spacing.lg,
+    fontSize: 13,
+    color: colors.warning,
+    textAlign: "center",
   },
   bottom: {
     paddingBottom: spacing.xl,
