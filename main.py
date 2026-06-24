@@ -61,11 +61,13 @@ FREE_TIER_REPLY_MODEL = claude_client.FAST_MODEL
 PREMIUM_TIER_REPLY_MODEL = claude_client.MODEL
 VVIP_TIER_REPLY_MODEL = claude_client.MODEL
 
-# 무료유저가 일일 한도에 도달했을 때, 보상형 광고 1회 시청으로 +5개를
-# 더 받을 수 있다. 하루 최대 2회(=+10개)까지로 캡을 걸어서, 광고를
-# 무한정 반복 시청해 한도 자체를 무력화하는 걸 막는다.
-AD_BONUS_MESSAGES = 5
-AD_BONUS_MAX_PER_DAY = 2
+# 무료유저가 일일 한도에 도달했을 때, 보상형 광고 1회 시청으로 +3개를
+# 더 받을 수 있다. 하루 최대 3회(=+9개)까지로 캡을 걸어서, 광고를
+# 무한정 반복 시청해 한도 자체를 무력화하는 걸 막는다. (총 여유분은 작게
+# 유지하고 광고 시청 "회수"를 늘리는 쪽으로 설계 - 같은 총량이면 광고
+# 노출 빈도가 광고 수익에 더 직접적으로 기여한다.)
+AD_BONUS_MESSAGES = 3
+AD_BONUS_MAX_PER_DAY = 3
 
 LIMIT_REACHED_REPLY = (
     "{name} smiles. \"hey, you've used up today's messages with me - I'll be right "

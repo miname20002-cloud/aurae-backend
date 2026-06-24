@@ -1178,7 +1178,7 @@ export default function ChatScreen() {
             {watchingAd ? (
               <ActivityIndicator color={colors.background} />
             ) : (
-              <Text style={styles.adBonusButtonText}>📺 Watch an ad for +5 messages</Text>
+              <Text style={styles.adBonusButtonText}>📺 Watch an ad for +3 messages</Text>
             )}
           </Pressable>
         )}
