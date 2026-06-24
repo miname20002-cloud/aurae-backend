@@ -58,9 +58,18 @@ const MILESTONE_TOAST_HOLD_MS = 5000;
 const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
+const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
 const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
 const INTRO_FADE_OUT_MS = 600; // smooth fade duration as the intro overlay dissolves into the revealed chat UI
+
+// 가입 직후 첫 입장 코치마크 - 카툰 말풍선으로 핵심 기능 3개를 순서대로 짚어준다.
+// 1회만 자동 노출, AsyncStorage 플래그로 기억한다.
+const COACH_STEPS: { text: string }[] = [
+  { text: "tap me anytime to replay my intro 🎬" },
+  { text: "💗 relationship & 🔥 streak — keep these glowing every day" },
+  { text: "say anything, I'm listening 👂" },
+];
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
@@ -300,6 +309,59 @@ export default function ChatScreen() {
   // --- streak gauge fill (segment count = next_milestone - prev_milestone) ---
   const [streakPrevMilestone, setStreakPrevMilestone] = useState(0);
   const [streakNextMilestone, setStreakNextMilestone] = useState<number | null>(3);
+
+  // --- first-visit coach marks (cartoon callouts, shown once) ---
+  const [coachStep, setCoachStep] = useState(0); // 0 = inactive, 1-3 = active step
+  const [coachTarget, setCoachTarget] = useState<{ x: number; y: number; width: number; height: number } | null>(
+    null
+  );
+  const avatarWrapRef = useRef<View>(null);
+  const gaugeStackRef = useRef<View>(null);
+  const inputRowRef = useRef<View>(null);
+
+  function measureCoachTarget(ref: React.RefObject<View>) {
+    // measureInWindow needs the target to have actually painted - retry once
+    // on the next frame if it comes back empty (e.g. right after a layout change).
+    ref.current?.measureInWindow((x, y, width, height) => {
+      if (width === 0 && height === 0) {
+        requestAnimationFrame(() => {
+          ref.current?.measureInWindow((x2, y2, w2, h2) => setCoachTarget({ x: x2, y: y2, width: w2, height: h2 }));
+        });
+      } else {
+        setCoachTarget({ x, y, width, height });
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (coachStep === 1) measureCoachTarget(avatarWrapRef);
+    else if (coachStep === 2) measureCoachTarget(gaugeStackRef);
+    else if (coachStep === 3) measureCoachTarget(inputRowRef);
+  }, [coachStep]);
+
+  function startCoachMarksIfFirstTime() {
+    AsyncStorage.getItem(COACH_MARKS_SEEN_KEY)
+      .then((seen) => {
+        if (!seen) {
+          setTimeout(() => setCoachStep(1), 400);
+        }
+      })
+      .catch(() => {});
+  }
+
+  function dismissCoachMarks() {
+    setCoachStep(0);
+    setCoachTarget(null);
+    AsyncStorage.setItem(COACH_MARKS_SEEN_KEY, "true").catch(() => {});
+  }
+
+  function advanceCoachMarks() {
+    if (coachStep < COACH_STEPS.length) {
+      setCoachStep((s) => s + 1);
+    } else {
+      dismissCoachMarks();
+    }
+  }
 
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
@@ -579,6 +641,7 @@ export default function ChatScreen() {
                   introPlayer.pause();
                   setShowIntroOverlay(false);
                   setInitializing(false);
+                  startCoachMarksIfFirstTime();
                 }, INTRO_FADE_OUT_MS);
               }, SPARKLE_LINGER_MS);
             } catch {
@@ -588,6 +651,7 @@ export default function ChatScreen() {
               introOverlayOpacity.value = 0;
               setShowIntroOverlay(false);
               setInitializing(false);
+              startCoachMarksIfFirstTime();
             }
           }, INTRO_VIDEO_DURATION_MS);
         } else {
@@ -754,6 +818,47 @@ export default function ChatScreen() {
         </View>
       )}
 
+      {coachStep > 0 && coachTarget && (
+        <View style={styles.coachOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
+          <View
+            style={[
+              styles.coachHighlight,
+              {
+                left: coachTarget.x - 6,
+                top: coachTarget.y - 6,
+                width: coachTarget.width + 12,
+                height: coachTarget.height + 12,
+                borderRadius: coachStep === 1 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
+              },
+            ]}
+            pointerEvents="none"
+          />
+          <View
+            style={[
+              styles.coachBubble,
+              coachStep === 3
+                ? { top: Math.max(70, coachTarget.y - 130) }
+                : { top: coachTarget.y + coachTarget.height + 24 },
+            ]}
+            pointerEvents="none"
+          >
+            <Text style={styles.coachBubbleText}>{COACH_STEPS[coachStep - 1].text}</Text>
+            <View style={styles.coachDots}>
+              {COACH_STEPS.map((_, i) => (
+                <View key={i} style={[styles.coachDot, i === coachStep - 1 && styles.coachDotActive]} />
+              ))}
+            </View>
+          </View>
+          <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
+            <Text style={styles.coachSkipText}>skip</Text>
+          </Pressable>
+          <Text style={styles.coachTapHint} pointerEvents="none">
+            tap anywhere to continue
+          </Text>
+        </View>
+      )}
+
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -804,6 +909,7 @@ export default function ChatScreen() {
               </Animated.View>
 
               <Pressable
+                ref={avatarWrapRef}
                 onPress={() => {
                   if (!companion) return;
                   // 캐릭터 프레임 터치 → 풀스크린 인트로 영상 재생.
@@ -866,7 +972,7 @@ export default function ChatScreen() {
 
           <View style={styles.headerCenter}>
             <View style={styles.centerRow}>
-              <View style={styles.gaugeStack}>
+              <View style={styles.gaugeStack} ref={gaugeStackRef}>
                 <Gauge
                   icon="♥"
                   color="#FF8FAB"
@@ -975,7 +1081,7 @@ export default function ChatScreen() {
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        <View style={styles.inputRow}>
+        <View style={styles.inputRow} ref={inputRowRef}>
           <TextInput
             value={input}
             onChangeText={setInput}
@@ -1107,6 +1213,82 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "700",
+  },
+  coachOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    zIndex: 300,
+  },
+  coachHighlight: {
+    position: "absolute",
+    borderWidth: 3,
+    borderColor: "#FFD76B",
+    shadowColor: "#FFD76B",
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+  },
+  coachBubble: {
+    position: "absolute",
+    left: 24,
+    right: 24,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 3,
+    borderColor: "#1A1014",
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  coachBubbleText: {
+    color: "#1A1014",
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  coachDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 12,
+  },
+  coachDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "rgba(26,16,20,0.25)",
+  },
+  coachDotActive: {
+    backgroundColor: "#1A1014",
+  },
+  coachSkip: {
+    position: "absolute",
+    top: 54,
+    right: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  coachSkipText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  coachTapHint: {
+    position: "absolute",
+    bottom: 36,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 11,
+    fontStyle: "italic",
   },
   container: {
     flex: 1,
