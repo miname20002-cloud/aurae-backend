@@ -440,6 +440,16 @@ export default function ChatScreen() {
     playerB.pause();
   }, [companion]);
 
+  // 캐릭터 프레임 터치로 띄운 풀스크린 인트로 영상이 끝까지 재생되면
+  // 자동으로 닫혀서 채팅방으로 자연스럽게 복귀한다. 중간에 터치하면
+  // 기존 onPress(스킵)가 그대로 동작한다.
+  useEffect(() => {
+    const subscription = fullscreenPlayer.addListener("playToEnd", () => {
+      setShowFullscreenClip(false);
+    });
+    return () => subscription.remove();
+  }, [fullscreenPlayer]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -671,7 +681,7 @@ export default function ChatScreen() {
             nativeControls={false}
           />
           <View style={styles.fullscreenClipHint}>
-            <Text style={styles.fullscreenClipHintText}>tap to close</Text>
+            <Text style={styles.fullscreenClipHintText}>tap to skip</Text>
           </View>
         </Pressable>
       )}
@@ -727,11 +737,14 @@ export default function ChatScreen() {
 
               <Pressable
                 onPress={() => {
-                  if (reactionPath) {
-                    fullscreenPlayer.replace(assetUrl(reactionPath));
-                    fullscreenPlayer.play();
-                    setShowFullscreenClip(true);
-                  }
+                  if (!companion) return;
+                  // 캐릭터 프레임 터치 → 풀스크린 인트로 영상 재생.
+                  // 영상이 끝까지 재생되면 위쪽 playToEnd 리스너가 자동으로
+                  // 닫아서 채팅방으로 자연스럽게 복귀한다. 중간에 터치하면
+                  // 스킵된다 (위 onPress).
+                  fullscreenPlayer.replace(assetUrl(introClipPath(companion.id)));
+                  fullscreenPlayer.play();
+                  setShowFullscreenClip(true);
                 }}
                 style={styles.avatarWrap}
               >
