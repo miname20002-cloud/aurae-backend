@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Image } from "react-native";
 import Screen from "@/components/Screen";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
@@ -6,6 +6,7 @@ import { useOnboarding } from "@/context/OnboardingContext";
 import { companionsFor } from "@/lib/companions";
 import { signup } from "@/lib/api";
 import { saveSession } from "@/lib/session";
+import { assetUrl } from "@/lib/api";
 import { useState } from "react";
 
 export default function CompanionScreen() {
@@ -53,9 +54,10 @@ export default function CompanionScreen() {
               disabled={loading}
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
-              <View style={[styles.avatar, { backgroundColor: companion.accent }]}>
-                <Text style={styles.avatarText}>{companion.initial}</Text>
-              </View>
+              <Image 
+                source={{ uri: assetUrl(companion.facePath) }}
+                style={styles.avatarImage}
+              />
               <Text style={styles.optionText}>{companion.name}</Text>
             </Pressable>
           ))}
@@ -113,17 +115,10 @@ const styles = StyleSheet.create({
   optionPressed: {
     borderColor: colors.accent,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.background,
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
   },
   optionText: {
     fontSize: 16,
