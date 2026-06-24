@@ -289,6 +289,7 @@ export default function ChatScreen() {
   const [themes, setThemes] = useState<ThemeInfo[]>([]);
   const [activeThemeId, setActiveThemeId] = useState("default");
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [bonusToast, setBonusToast] = useState<BonusInfo | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -361,6 +362,13 @@ export default function ChatScreen() {
     } else {
       dismissCoachMarks();
     }
+  }
+
+  // 설정 모달의 "Replay Tips"용 - 최초 1회 체크(AsyncStorage)는 건너뛰고
+  // 언제든 다시 볼 수 있게 한다.
+  function replayCoachMarks() {
+    setShowSettingsModal(false);
+    setCoachStep(1);
   }
 
   const activeTheme = themes.find((t) => t.id === activeThemeId);
@@ -994,9 +1002,9 @@ export default function ChatScreen() {
                   label={`${currentStreak}`}
                 />
               </View>
-              <Pressable onPress={handleOpenThemeModal} style={styles.themeButtonInline}>
+              <Pressable onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInline}>
                 <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
-                  <Text style={styles.themeButtonText}>🎨</Text>
+                  <Text style={styles.settingsButtonText}>⚙️</Text>
                 </Animated.View>
                 {unseenThemeCount > 0 && (
                   <View style={styles.themeBadgeDot}>
@@ -1129,6 +1137,30 @@ export default function ChatScreen() {
                 {theme.id === activeThemeId && <Text style={styles.themeCheck}>✓</Text>}
               </Pressable>
             ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showSettingsModal} transparent animationType="fade">
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowSettingsModal(false)}>
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Settings</Text>
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => {
+                setShowSettingsModal(false);
+                handleOpenThemeModal();
+              }}
+            >
+              <Text style={styles.settingsRowIcon}>🎨</Text>
+              <Text style={styles.settingsRowText}>Chat Theme</Text>
+              <Text style={styles.settingsRowChevron}>›</Text>
+            </Pressable>
+            <Pressable style={[styles.settingsRow, styles.settingsRowLast]} onPress={replayCoachMarks}>
+              <Text style={styles.settingsRowIcon}>❓</Text>
+              <Text style={styles.settingsRowText}>Replay Tips</Text>
+              <Text style={styles.settingsRowChevron}>›</Text>
+            </Pressable>
           </View>
         </Pressable>
       </Modal>
@@ -1458,12 +1490,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
   },
-  themeButtonInline: {
+  settingsButtonInline: {
     paddingHorizontal: 4,
     paddingVertical: 2,
     position: "relative",
   },
-  themeButtonText: {
+  settingsButtonText: {
     fontSize: 18,
   },
   themeBadgeDot: {
@@ -1649,5 +1681,29 @@ const styles = StyleSheet.create({
   themeCheck: {
     color: colors.accent,
     fontWeight: "700",
+  },
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  settingsRowLast: {
+    borderBottomWidth: 0,
+  },
+  settingsRowIcon: {
+    fontSize: 18,
+  },
+  settingsRowText: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  settingsRowChevron: {
+    color: colors.textTertiary,
+    fontSize: 18,
   },
 });
