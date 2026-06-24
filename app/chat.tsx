@@ -41,6 +41,7 @@ import {
   getThemes,
   setChatTheme,
   sendShare,
+  watchAdBonus,
   type ThemeInfo,
   type BonusInfo,
 } from "@/lib/api";
@@ -264,6 +265,8 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [adBonusOffer, setAdBonusOffer] = useState(false);
+  const [watchingAd, setWatchingAd] = useState(false);
   const [idleIdx, setIdleIdx] = useState(0);
   const [activeIsA, setActiveIsA] = useState(true);
   const [reactionPath, setReactionPath] = useState<string | null>(null);
@@ -752,6 +755,7 @@ export default function ChatScreen() {
 
     setInput("");
     setError(null);
+    setAdBonusOffer(false);
     addMessage("user", text);
     setSending(true);
 
@@ -762,6 +766,10 @@ export default function ChatScreen() {
       getActive().play();
       setReactionPath(result.asset_path);
       setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
+
+      if (result.limit_reached && result.ad_bonus_eligible) {
+        setAdBonusOffer(true);
+      }
 
       if (typeof result.relationship_level === "number") {
         setRelationshipLevel(result.relationship_level);
@@ -804,6 +812,24 @@ export default function ChatScreen() {
       setError(`Message didn't go through. (${detail})`);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleWatchAdBonus() {
+    setWatchingAd(true);
+    setError(null);
+    try {
+      // TODO: 실제 보상형 광고 SDK(예: AdMob RewardedAd) 연동 지점.
+      // 지금은 placeholder라 바로 호출하지만, 실제로는 광고 SDK의
+      // "보상 지급" 콜백(예: onUserEarnedReward) 안에서만 watchAdBonus()를
+      // 호출해야 한다 - 광고를 끝까지 안 봐도 보너스가 나가면 안 되니까.
+      await watchAdBonus();
+      setAdBonusOffer(false);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setError(`Couldn't grant the bonus right now. (${detail})`);
+    } finally {
+      setWatchingAd(false);
     }
   }
 
@@ -1142,6 +1168,20 @@ export default function ChatScreen() {
         />
 
         {error && <Text style={styles.error}>{error}</Text>}
+
+        {adBonusOffer && (
+          <Pressable
+            onPress={handleWatchAdBonus}
+            disabled={watchingAd}
+            style={({ pressed }) => [styles.adBonusButton, pressed && styles.adBonusButtonPressed]}
+          >
+            {watchingAd ? (
+              <ActivityIndicator color={colors.background} />
+            ) : (
+              <Text style={styles.adBonusButtonText}>📺 Watch an ad for +5 messages</Text>
+            )}
+          </Pressable>
+        )}
 
         <View style={styles.inputRow} ref={inputRowRef}>
           <TextInput
@@ -1652,6 +1692,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xs,
+  },
+  adBonusButton: {
+    backgroundColor: colors.accent,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    alignItems: "center",
+  },
+  adBonusButtonPressed: {
+    backgroundColor: colors.accentDark,
+  },
+  adBonusButtonText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: "700",
   },
   inputRow: {
     flexDirection: "row",

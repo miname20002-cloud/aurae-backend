@@ -87,6 +87,7 @@ export type ChatResponse = {
   asset_path: string;
   crisis_flagged: boolean;
   limit_reached?: boolean;
+  ad_bonus_eligible?: boolean;
   streak?: StreakInfo;
   bonus?: BonusInfo | null;
   relationship_level?: number;
@@ -146,6 +147,13 @@ export type ThemesResponse = {
 export type ShareResponse = {
   reward_granted: boolean;
   reward_points: number;
+};
+
+export type AdBonusResponse = {
+  messages_granted: number;
+  ad_bonus_remaining_today: number;
+  daily_message_count: number;
+  daily_limit: number;
 };
 
 export async function signup(params: {
@@ -356,6 +364,17 @@ export async function sendShare(momentType: string): Promise<ShareResponse> {
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Share failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function watchAdBonus(): Promise<AdBonusResponse> {
+  const response = await authorizedFetch("/rewards/ad-bonus", { method: "POST" });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Ad bonus failed (${response.status}): ${body}`);
   }
 
   return response.json();

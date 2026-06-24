@@ -29,7 +29,7 @@ class User(Base):
     age_verified = Column(Boolean, default=False, nullable=False)
     companion_id = Column(String, nullable=True)  # chloe / maya / ethan / jayden
     last_emotion_asset = Column(String, nullable=True)  # filename only, e.g. "Chloe_wink2.mp4"
-    tier = Column(String, default="free", nullable=False)  # "free" | "premium"
+    tier = Column(String, default="free", nullable=False)  # "free" | "premium" | "vvip"
     daily_message_count = Column(Integer, default=0, nullable=False)
     daily_count_date = Column(String, nullable=True)  # "YYYY-MM-DD", resets count when it changes
     refresh_token_hash = Column(String, nullable=True)
@@ -45,6 +45,10 @@ class User(Base):
     last_bonus_date = Column(String, nullable=True)  # "YYYY-MM-DD", caps surprise bonus to 1/day
     reward_points = Column(Integer, default=0, nullable=False)  # soft currency from streaks/shares/bonuses
     chat_theme = Column(String, default="default", nullable=False)  # active chat theme id
+
+    # --- rewarded-ad bonus messages (free tier, monetizes the daily-cap wall) ---
+    ad_bonus_date = Column(String, nullable=True)  # "YYYY-MM-DD", resets ad_bonus_count when it changes
+    ad_bonus_count = Column(Integer, default=0, nullable=False)  # rewarded ads redeemed today, capped per day
 
     messages = relationship("ChatMessage", back_populates="user")
     insight_profile = relationship("UserInsightProfile", back_populates="user", uselist=False)

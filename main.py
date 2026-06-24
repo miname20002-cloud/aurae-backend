@@ -61,6 +61,12 @@ FREE_TIER_REPLY_MODEL = claude_client.FAST_MODEL
 PREMIUM_TIER_REPLY_MODEL = claude_client.MODEL
 VVIP_TIER_REPLY_MODEL = claude_client.MODEL
 
+# 무료유저가 일일 한도에 도달했을 때, 보상형 광고 1회 시청으로 +5개를
+# 더 받을 수 있다. 하루 최대 2회(=+10개)까지로 캡을 걸어서, 광고를
+# 무한정 반복 시청해 한도 자체를 무력화하는 걸 막는다.
+AD_BONUS_MESSAGES = 5
+AD_BONUS_MAX_PER_DAY = 2
+
 LIMIT_REACHED_REPLY = (
     "{name} smiles. \"hey, you've used up today's messages with me - I'll be right "
     "here when they reset tomorrow. if you don't want to wait, Aurae Premium gets you "
@@ -140,6 +146,52 @@ def debug_db_info():
         "host": engine.url.host,
         "database": engine.url.database,
         "raw_env_set": "DATABASE_URL" in os.environ,
+    }
+
+
+@app.post("/rewards/ad-bonus")
+def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id)):
+    """
+    Free-tier users who've hit today's message cap can watch a rewarded ad
+    to unlock a few more messages right then - this is the actual
+    monetization moment, since it's the exact instant a non-paying user is
+    most willing to trade attention for access. Capped at AD_BONUS_MAX_PER_DAY
+    redemptions/day so this can't be farmed into an unlimited-messages
+    loophole that defeats the daily cap entirely.
+
+    NOTE: this endpoint only grants the bonus - it does not itself verify
+    that an ad was actually shown. The actual ad SDK (e.g. AdMob rewarded
+    ad) must call this only from its "ad fully watched" callback on the
+    client; calling it from anywhere else in the client is a client-side
+    trust issue, not something this endpoint can prevent server-side
+    without a signed ad-network server callback (most mediation SDKs offer
+    one - wire that in before shipping if abuse becomes a real problem).
+    """
+    session = get_session(engine)
+    user = session.get(User, current_user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if user.tier != "free":
+        raise HTTPException(status_code=400, detail="Ad bonus is only available on the free tier.")
+
+    today = date.today().isoformat()
+    if user.ad_bonus_date != today:
+        user.ad_bonus_date = today
+        user.ad_bonus_count = 0
+
+    if user.ad_bonus_count >= AD_BONUS_MAX_PER_DAY:
+        raise HTTPException(status_code=403, detail="No more bonus messages available today.")
+
+    user.ad_bonus_count += 1
+    user.daily_message_count = max(0, user.daily_message_count - AD_BONUS_MESSAGES)
+    session.commit()
+
+    return {
+        "messages_granted": AD_BONUS_MESSAGES,
+        "ad_bonus_remaining_today": AD_BONUS_MAX_PER_DAY - user.ad_bonus_count,
+        "daily_message_count": user.daily_message_count,
+        "daily_limit": FREE_DAILY_MESSAGE_LIMIT,
     }
 
 
@@ -483,6 +535,7 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "asset_path": asset_path,
             "crisis_flagged": False,
             "limit_reached": True,
+            "ad_bonus_eligible": user.tier == "free",
             "streak": streak_info,
             "bonus": None,
             "relationship_level": profile.relationship_level,
