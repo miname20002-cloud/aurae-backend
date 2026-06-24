@@ -20,13 +20,13 @@ function AuroraGlow() {
   }, []);
 
   const sweepProps = useAnimatedProps(() => {
-    const cx = 10 + progress.value * 200; // 왼쪽(a 근처) -> 오른쪽(e 근처)
+    const cx = 70 + progress.value * 200; // 70~270, 반지름(60)+버퍼만큼 여유를 둬서 캔버스 끝에서 안 잘림
     const fillOpacity = Math.sin(progress.value * Math.PI); // 0 -> 1 -> 0
     return { cx, fillOpacity };
   });
 
   return (
-    <Svg width={220} height={120} viewBox="0 0 220 120" style={styles.auroraSvg}>
+    <Svg width={340} height={120} viewBox="0 0 340 120" style={styles.auroraSvg}>
       <Defs>
         <RadialGradient id="auroraWhite" cx="50%" cy="50%" r="50%">
           <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.9} />
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   wordmarkWrap: {
-    width: 220,
+    width: 340,
     height: 120,
     alignItems: "center",
     justifyContent: "center",
