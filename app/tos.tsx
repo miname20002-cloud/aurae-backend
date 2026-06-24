@@ -49,6 +49,8 @@ export default function TosScreen() {
           data to third parties, nor do we share it for cross-context behavioral advertising. Chat
           messages may be processed by our AI providers strictly as a business purpose to generate
           replies. You can request deletion of your account and data at any time by contacting us below.
+          We may retain a copy of your chat history beyond a deletion request where reasonably necessary
+          to resolve a dispute, defend against a claim, or comply with a legal obligation.
         </Text>
 
         <Text style={styles.sectionTitle}>Safety & crisis support</Text>

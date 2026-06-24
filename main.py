@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -22,6 +22,11 @@ from db import User, ChatMessage, UserInsightProfile, get_engine, get_session
 app = FastAPI(title="Aurae")
 
 PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json")))
+
+# 분쟁 대응(모함/허위 스크린샷 대응 등)용 admin 조회 엔드포인트 보호 키.
+# Render 대시보드 환경변수에 ADMIN_API_KEY를 직접 설정하세요 - 코드에 값을
+# 적어두면 안 됩니다. 설정 안 하면 해당 엔드포인트는 항상 403을 반환합니다.
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY")
 
 engine = get_engine(os.environ.get("DATABASE_URL", "sqlite:///aurae.db"))
 print(f"[DB DEBUG] Using: {'POSTGRES' if 'postgresql' in str(engine.url) else 'SQLITE - fallback!'} | URL host: {engine.url.host}")
@@ -125,6 +130,46 @@ def debug_db_info():
         "host": engine.url.host,
         "database": engine.url.database,
         "raw_env_set": "DATABASE_URL" in os.environ,
+    }
+
+
+@app.get("/admin/users/{user_id}/messages")
+def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None)):
+    """
+    분쟁 대응용 - 유저가 가짜 스크린샷/조작된 대화로 모함할 경우, 실제
+    서버에 저장된 원본 대화 기록(타임스탬프 포함)을 대조 확인하기 위한
+    엔드포인트. ADMIN_API_KEY 헤더(x-admin-key)로만 접근 가능하며, 일반
+    유저 인증(JWT)과는 별개의 보호 체계다.
+    """
+    if not ADMIN_API_KEY or x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    session = get_session(engine)
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    messages = (
+        session.query(ChatMessage)
+        .filter(ChatMessage.user_id == user_id)
+        .order_by(ChatMessage.id.asc())
+        .all()
+    )
+
+    return {
+        "user_id": user.id,
+        "name": user.name,
+        "companion_id": user.companion_id,
+        "account_created_at": user.created_at.isoformat() if user.created_at else None,
+        "message_count": len(messages),
+        "messages": [
+            {
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in messages
+        ],
     }
 
 
