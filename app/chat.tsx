@@ -667,23 +667,24 @@ export default function ChatScreen() {
       </Animated.View>
 
       {showFullscreenClip && (
-        <Pressable
-          onPress={() => {
-            fullscreenPlayer.pause();
-            setShowFullscreenClip(false);
-          }}
-          style={styles.fullscreenClipOverlay}
-        >
+        <View style={styles.fullscreenClipOverlay}>
           <VideoView
             player={fullscreenPlayer}
             style={styles.fullscreenClipVideo}
             contentFit="contain"
             nativeControls={false}
           />
-          <View style={styles.fullscreenClipHint}>
-            <Text style={styles.fullscreenClipHintText}>tap to skip</Text>
-          </View>
-        </Pressable>
+          <Pressable
+            onPress={() => {
+              fullscreenPlayer.pause();
+              setShowFullscreenClip(false);
+            }}
+            style={styles.fullscreenClipSkipButton}
+            hitSlop={16}
+          >
+            <Text style={styles.fullscreenClipSkipText}>Skip ✕</Text>
+          </Pressable>
+        </View>
       )}
 
       <KeyboardAvoidingView
@@ -1004,6 +1005,21 @@ const styles = StyleSheet.create({
     color: "#999999",
     fontSize: 12,
     fontStyle: "italic",
+  },
+  fullscreenClipSkipButton: {
+    position: "absolute",
+    top: 80,
+    right: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    zIndex: 250,
+  },
+  fullscreenClipSkipText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
   container: {
     flex: 1,

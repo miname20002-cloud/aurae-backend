@@ -51,6 +51,35 @@ THEMES = {
 
 THEME_UNLOCK_DAYS = {t["unlock_streak"] for t in THEMES.values() if t["unlock_streak"] > 0}
 
+# All "celebration" days worth a gauge segment - union of point-reward days
+# and theme-unlock days, sorted ascending. Used purely for the frontend
+# streak gauge (which bracket the user is currently filling toward).
+STREAK_MILESTONES = sorted(set(MILESTONE_REWARDS.keys()) | THEME_UNLOCK_DAYS)
+
+
+def streak_progress(current_streak: int) -> dict:
+    """
+    Returns where the user sits between the previous milestone they've
+    already cleared and the next one ahead, as a 0-100 percent fill -
+    purely for driving the frontend streak gauge bar. Caps at 100% once
+    the user has passed every defined milestone (no more brackets ahead).
+    """
+    prev_milestone = 0
+    next_milestone = None
+    for m in STREAK_MILESTONES:
+        if m <= current_streak:
+            prev_milestone = m
+        else:
+            next_milestone = m
+            break
+
+    if next_milestone is None:
+        return {"prev_milestone": prev_milestone, "next_milestone": None, "progress_pct": 100.0}
+
+    span = next_milestone - prev_milestone
+    progress_pct = round((current_streak - prev_milestone) / span * 100, 1) if span else 100.0
+    return {"prev_milestone": prev_milestone, "next_milestone": next_milestone, "progress_pct": progress_pct}
+
 
 def update_streak(session, user: User) -> dict:
     """Safe to call on every /chat turn - the actual update only happens once per day."""
@@ -90,6 +119,7 @@ def update_streak(session, user: User) -> dict:
         "longest_streak": user.longest_streak,
         "streak_freezes": user.streak_freezes,
         "milestone_hit": milestone_hit,
+        **streak_progress(user.current_streak),
     }
 
 
@@ -182,4 +212,5 @@ def rewards_state(current_user_id: int = Depends(auth.get_current_user_id)):
         "streak_freezes": user.streak_freezes,
         "reward_points": user.reward_points,
         "chat_theme": user.chat_theme,
+        **streak_progress(user.current_streak),
     }

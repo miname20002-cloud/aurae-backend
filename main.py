@@ -30,6 +30,13 @@ app.include_router(rewards.router)
 
 INSIGHT_REFRESH_INTERVAL = 6
 
+# Every 3 trust_markers earned (one per insight-refresh cycle where Claude
+# detected a genuine trust signal) bumps relationship_level by 1 - see
+# _refresh_insights() below. This constant exists purely so the frontend
+# gauge can show "how full is the current level's bar", independent of
+# the leveling formula itself ever changing.
+TRUST_MARKERS_PER_LEVEL = 3
+
 FREE_DAILY_MESSAGE_LIMIT = 25
 # Premium is marketed as "unlimited" - this cap is intentionally high enough
 # that no normal user will ever hit it. It exists purely as a cost safety
@@ -62,6 +69,12 @@ for _char_dir in ["Chloe_Assets", "Ethan_Assets", "Jayden_Assets", "Maya_Assets"
     _full_path = os.path.join(ASSETS_PARENT_DIR, _char_dir)
     if os.path.isdir(_full_path):
         app.mount(f"/assets/{_char_dir}", StaticFiles(directory=_full_path), name=_char_dir)
+
+
+def _relationship_progress_pct(trust_markers: int) -> float:
+    """0-100 fill for 'how close to the next relationship level' - purely
+    for the frontend gauge. See TRUST_MARKERS_PER_LEVEL note above."""
+    return round((trust_markers % TRUST_MARKERS_PER_LEVEL) / TRUST_MARKERS_PER_LEVEL * 100, 1)
 
 
 class SignupRequest(BaseModel):
@@ -205,6 +218,7 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
 
     profile = session.get(UserInsightProfile, user.id)
     level = profile.relationship_level if profile else 1
+    trust_markers = profile.trust_markers if profile else 0
 
     recent = (
         session.query(ChatMessage)
@@ -224,6 +238,7 @@ def chat_history(current_user_id: int = Depends(auth.get_current_user_id)):
         "asset_path": asset_path,
         "relationship_level": level,
         "relationship_level_name": memories.level_name(level),
+        "relationship_progress_pct": _relationship_progress_pct(trust_markers),
     }
 
 
@@ -357,6 +372,7 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id)):
         "asset_path": asset_path,
         "relationship_level": profile.relationship_level,
         "relationship_level_name": memories.level_name(profile.relationship_level),
+        "relationship_progress_pct": _relationship_progress_pct(profile.trust_markers),
     }
 
 
@@ -387,6 +403,7 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "streak": streak_info,
             "bonus": None,
             "relationship_level": profile.relationship_level,
+            "relationship_progress_pct": _relationship_progress_pct(profile.trust_markers),
             "relationship_level_up": None,
         }
 
@@ -411,6 +428,7 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
             "streak": streak_info,
             "bonus": None,
             "relationship_level": profile.relationship_level,
+            "relationship_progress_pct": _relationship_progress_pct(profile.trust_markers),
             "relationship_level_up": None,
         }
 
@@ -470,6 +488,7 @@ def chat(req: ChatRequest, current_user_id: int = Depends(auth.get_current_user_
         "streak": streak_info,
         "bonus": bonus,
         "relationship_level": profile.relationship_level,
+        "relationship_progress_pct": _relationship_progress_pct(profile.trust_markers),
         "relationship_level_up": level_up,
     }
 
@@ -498,7 +517,7 @@ def _refresh_insights(session, user, profile):
     old_level = profile.relationship_level
     if data.get("trust_signal"):
         profile.trust_markers += 1
-    profile.relationship_level = 1 + profile.trust_markers // 3
+    profile.relationship_level = 1 + profile.trust_markers // TRUST_MARKERS_PER_LEVEL
     session.commit()
 
     memorable_event = data.get("memorable_event")
