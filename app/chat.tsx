@@ -222,6 +222,10 @@ export default function ChatScreen() {
   const [userPhotoUri, setUserPhotoUri] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [showIntroOverlay, setShowIntroOverlay] = useState(false);
+  const [showFullscreenClip, setShowFullscreenClip] = useState(false);
+  const fullscreenPlayer = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
   const nextId = useRef(0);
   const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
@@ -651,6 +655,27 @@ export default function ChatScreen() {
           ))}
         </View>
       </Animated.View>
+
+      {showFullscreenClip && (
+        <Pressable
+          onPress={() => {
+            fullscreenPlayer.pause();
+            setShowFullscreenClip(false);
+          }}
+          style={styles.fullscreenClipOverlay}
+        >
+          <VideoView
+            player={fullscreenPlayer}
+            style={styles.fullscreenClipVideo}
+            contentFit="contain"
+            nativeControls={false}
+          />
+          <View style={styles.fullscreenClipHint}>
+            <Text style={styles.fullscreenClipHintText}>tap to close</Text>
+          </View>
+        </Pressable>
+      )}
+
       <KeyboardAvoidingView
         style={styles.flexFill}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -700,7 +725,16 @@ export default function ChatScreen() {
                 </Svg>
               </Animated.View>
 
-              <View style={styles.avatarWrap}>
+              <Pressable
+                onPress={() => {
+                  if (reactionPath) {
+                    fullscreenPlayer.replace(assetUrl(reactionPath));
+                    fullscreenPlayer.play();
+                    setShowFullscreenClip(true);
+                  }
+                }}
+                style={styles.avatarWrap}
+              >
                 {companion?.facePath && (
                   <Image
                     source={{ uri: assetUrl(companion.facePath) }}
@@ -738,7 +772,7 @@ export default function ChatScreen() {
                     mask="url(#avatarCircleMask)"
                   />
                 </Svg>
-              </View>
+              </Pressable>
             </View>
             <Text
               style={[styles.sideName, { color: companion?.accent ?? colors.textPrimary }]}
@@ -930,6 +964,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
+  },
+  fullscreenClipOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 199,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenClipVideo: {
+    width: "100%",
+    height: "100%",
+  },
+  fullscreenClipHint: {
+    position: "absolute",
+    bottom: 40,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  fullscreenClipHintText: {
+    color: "#999999",
+    fontSize: 12,
+    fontStyle: "italic",
   },
   container: {
     flex: 1,

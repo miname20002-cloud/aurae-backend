@@ -142,7 +142,6 @@ export async function signup(params: {
   ageConfirmed: boolean;
   genderPreference: string;
   companionId: string;
-  initialTone: string;
 }): Promise<SignupResponse> {
   const deviceId = await getOrCreateDeviceId();
 
@@ -154,7 +153,7 @@ export async function signup(params: {
       age_confirmed: params.ageConfirmed,
       gender_preference: params.genderPreference,
       companion_id: params.companionId,
-      initial_tone: params.initialTone,
+      initial_tone: "unknown", // 성향타입 선택 제거 - 대화하면서 자동 학습
       device_id: deviceId,
     }),
   });
