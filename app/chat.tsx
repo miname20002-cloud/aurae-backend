@@ -320,7 +320,7 @@ export default function ChatScreen() {
 
   const [fontsLoaded] = useFonts({ Fredoka_600SemiBold, Fredoka_700Bold });
 
-  function measureCoachTarget(ref: RefObject<View>) {
+  function measureCoachTarget(ref: RefObject<View | null>) {
     // measureInWindow needs the target to have actually painted - retry once
     // on the next frame if it comes back empty (e.g. right after a layout change).
     ref.current?.measureInWindow((x, y, width, height) => {
