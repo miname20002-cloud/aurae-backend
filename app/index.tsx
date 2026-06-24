@@ -29,8 +29,8 @@ function AuroraGlow() {
     <Svg width={340} height={120} viewBox="0 0 340 120" style={styles.auroraSvg}>
       <Defs>
         <RadialGradient id="auroraWhite" cx="50%" cy="50%" r="50%">
-          <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.9} />
-          <Stop offset="100%" stopColor="#FFFFFF" stopOpacity={0} />
+          <Stop offset="0%" stopColor="#C4B5FD" stopOpacity={0.95} />
+          <Stop offset="100%" stopColor="#C4B5FD" stopOpacity={0} />
         </RadialGradient>
       </Defs>
       <AnimatedCircle animatedProps={sweepProps} cy={60} r={60} fill="url(#auroraWhite)" />
