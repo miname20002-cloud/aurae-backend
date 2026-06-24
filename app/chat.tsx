@@ -571,6 +571,16 @@ export default function ChatScreen() {
     p.loop = false;
   });
 
+  // 캐시를 안 지우고 재접속했을 때, 직전 세션에서 떠돌던(orphaned) 인트로/
+  // 풀스크린 플레이어가 화면엔 안 보이면서 소리만 새는 경우가 있다.
+  // opacity(화면 표시)와 audio(재생)는 완전히 분리된 시스템이라, 화면에
+  // 안 보인다고 소리도 안 나는 게 보장되지 않는다 - 마운트 시점에 무조건
+  // 한 번 멈춰서 방어한다.
+  useEffect(() => {
+    introPlayer.pause();
+    fullscreenPlayer.pause();
+  }, []);
+
   function getActive() {
     return activeIsA ? playerA : playerB;
   }
