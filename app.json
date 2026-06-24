@@ -25,6 +25,13 @@
       "expo-secure-store",
       "expo-video",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2cf87ada-c22e-473d-a48a-7461d5345609"
+      }
+    },
+    "owner": "aurae5347"
   }
 }
