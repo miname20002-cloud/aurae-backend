@@ -17,9 +17,16 @@ Memory system note: UserMemory stores short, paraphrased, non-verbatim
 so the companion can naturally check back in on something later, the way a
 friend would. Capped per user and retired after being surfaced a few times
 (see memories.py) so it doesn't grow unbounded or get repeated forever.
+
+Cost tracking note: UsageLog stores per-call Anthropic API token counts and
+an estimated USD cost, so spend can be broken down by character/model/day
+without needing to pull it from the Anthropic console. Estimated cost is
+computed at write time using the PRICING table in main.py - if Anthropic's
+rates change, only future rows are affected, past rows keep their
+originally-computed value (which is what you actually paid).
 """
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Float, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 Base = declarative_base()
 class User(Base):
@@ -93,6 +100,18 @@ class UserMemory(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)  # short paraphrased fact, never a verbatim quote
     surfaced_count = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User")
+class UsageLog(Base):
+    __tablename__ = "usage_logs"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # nullable: some calls (e.g. extract_insights) span a batch, not cleanly 1 user
+    character = Column(String, nullable=True)  # chloe / maya / ethan / jayden, null for non-chat calls
+    endpoint = Column(String, nullable=False)  # "chat" / "chat_greeting" / "extract_insights"
+    model = Column(String, nullable=False)  # e.g. "claude-sonnet-4-6"
+    input_tokens = Column(Integer, nullable=False)
+    output_tokens = Column(Integer, nullable=False)
+    estimated_cost_usd = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User")
 def get_engine(db_url="sqlite:///aurae.db"):

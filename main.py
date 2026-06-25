@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from datetime import date, datetime, timedelta
 
@@ -19,7 +20,7 @@ import realtime_search
 import resonance
 import rewards
 import safety
-from db import User, ChatMessage, UserInsightProfile, get_engine, get_session
+from db import User, ChatMessage, UserInsightProfile, UsageLog, get_engine, get_session
 
 app = FastAPI(title="Aurae")
 
@@ -54,6 +55,29 @@ def get_db():
         yield session
     finally:
         session.close()
+
+
+def _log_usage(session, user_id: int, character: str | None, endpoint: str, usage: dict):
+    """
+    Persists one Anthropic-via-OpenRouter call's token counts + actual
+    billed cost (usage["cost"], straight from OpenRouter's response - real
+    spend, not an estimate). Called right after each claude_client call
+    succeeds, before any downstream processing, so a later error in that
+    request doesn't silently drop the cost record for a call that did
+    happen and did get billed.
+    """
+    session.add(
+        UsageLog(
+            user_id=user_id,
+            character=character,
+            endpoint=endpoint,
+            model=usage.get("model", "unknown"),
+            input_tokens=usage.get("prompt_tokens", 0),
+            output_tokens=usage.get("completion_tokens", 0),
+            estimated_cost_usd=usage.get("cost", 0.0),
+        )
+    )
+    session.commit()
 
 
 limiter = Limiter(key_func=get_real_ip)
@@ -277,6 +301,63 @@ def admin_get_user_messages(user_id: int, x_admin_key: str = Header(None), sessi
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in messages
+        ],
+    }
+
+
+@app.get("/admin/usage-report")
+def admin_usage_report(x_admin_key: str = Header(None), session=Depends(get_db)):
+    """
+    캐릭터별/엔드포인트별 토큰 사용량과 실제 비용 집계.
+    estimated_cost_usd는 OpenRouter가 응답마다 같이 내려주는 실제 청구
+    금액(usage.cost)을 그대로 적재한 값이라, 별도 가격표로 추정한 값이
+    아니라 실제로 청구된 금액에 가깝다 (claude_client._extract_usage 참고).
+    ADMIN_API_KEY 헤더(x-admin-key)로만 접근 가능.
+    """
+    if not ADMIN_API_KEY or x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    total_cost = session.query(func.sum(UsageLog.estimated_cost_usd)).scalar() or 0.0
+    total_calls = session.query(func.count(UsageLog.id)).scalar() or 0
+
+    by_character = (
+        session.query(
+            UsageLog.character,
+            func.sum(UsageLog.estimated_cost_usd),
+            func.sum(UsageLog.input_tokens),
+            func.sum(UsageLog.output_tokens),
+            func.count(UsageLog.id),
+        )
+        .group_by(UsageLog.character)
+        .all()
+    )
+
+    by_endpoint = (
+        session.query(
+            UsageLog.endpoint,
+            func.sum(UsageLog.estimated_cost_usd),
+            func.count(UsageLog.id),
+        )
+        .group_by(UsageLog.endpoint)
+        .all()
+    )
+
+    return {
+        "total_cost_usd": round(total_cost, 4),
+        "total_calls": total_calls,
+        "by_character": [
+            {
+                "character": character or "unknown",
+                "cost_usd": round(cost or 0.0, 4),
+                "input_tokens": int(input_tok or 0),
+                "output_tokens": int(output_tok or 0),
+                "calls": count,
+            }
+            for character, cost, input_tok, output_tok, count in by_character
+        ],
+        "by_endpoint": [
+            {"endpoint": endpoint, "cost_usd": round(cost or 0.0, 4), "calls": count}
+            for endpoint, cost, count in by_endpoint
         ],
     }
 
@@ -524,7 +605,8 @@ def chat_greeting(current_user_id: int = Depends(auth.get_current_user_id), sess
     )
     history = [{"role": "user", "content": opener_instruction}]
 
-    raw_reply = claude_client.generate_reply(system_prompt, history, model=reply_model)
+    raw_reply, usage = claude_client.generate_reply(system_prompt, history, model=reply_model)
+    _log_usage(session, user.id, user.companion_id, "chat_greeting", usage)
 
     match = EMO_TAG_PATTERN.search(raw_reply)
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "smile"
@@ -652,7 +734,8 @@ def chat(
     history = [{"role": m.role if m.role == "user" else "assistant", "content": m.content} for m in reversed(recent)]
     history.append({"role": "user", "content": req.message})
 
-    raw_reply = claude_client.generate_reply(system_prompt, history, model=reply_model)
+    raw_reply, usage = claude_client.generate_reply(system_prompt, history, model=reply_model)
+    _log_usage(session, user.id, user.companion_id, "chat", usage)
 
     match = EMO_TAG_PATTERN.search(raw_reply)
     emotion_tag = match.group(1) if match and match.group(1) in asset_map.EMOTION_TAGS else "neutral"
@@ -699,7 +782,15 @@ def _refresh_insights(session, user, profile):
     )
     excerpt = "\n".join(f"{m.role}: {m.content}" for m in reversed(recent))
     try:
-        raw = claude_client.extract_insights(excerpt)
+        raw, usage = claude_client.extract_insights(excerpt)
+    except Exception:
+        return None
+
+    # Logged as soon as the call succeeds, regardless of whether the JSON
+    # below parses cleanly - the cost was incurred either way.
+    _log_usage(session, user.id, user.companion_id, "extract_insights", usage)
+
+    try:
         data = json.loads(raw)
     except Exception:
         return None
