@@ -216,8 +216,8 @@
 
     <div class="beta-note">
       <strong>현재 aurae 오픈베타 서비스 중입니다.</strong><br>
-      사용 중 오류가 발생할 수 있습니다. 발생 시
-      <a id="reportEmail" href="#">메일</a>로 신고 바랍니다.
+      사용 중 오류가 발생할 수 있습니다.<br>
+      발생 시 <a id="reportEmail" href="#">문의하기</a>로 신고 바랍니다.
     </div>
   </div>
 
@@ -238,7 +238,7 @@
     const REPORT_EMAIL = REPORT_USER + "@" + REPORT_DOMAIN;
     const reportLink = document.getElementById('reportEmail');
     reportLink.href = "mailto:" + REPORT_EMAIL;
-    reportLink.textContent = REPORT_EMAIL;
+    reportLink.title = REPORT_EMAIL; // 마우스 올리면 주소 확인 가능, 화면엔 노출 안 함
 
     // 중앙에 aurae 로고("a" 마크)를 박은 QR. 에러 정정 레벨을 H로 올려서
     // 중앙 30%가 로고로 가려져도 스캔이 끊기지 않게 한다.
