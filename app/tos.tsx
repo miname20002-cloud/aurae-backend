@@ -88,7 +88,7 @@ export default function TosScreen() {
           individual claim in small claims court if it qualifies. You and Aurae each waive any right to a
           jury trial or to participate in a class, collective, or representative action. You may opt out
           of this arbitration agreement within 30 days of first accepting these terms by emailing
-          [miname20002@gmail.com] with your name and a clear statement that you wish to opt out.
+          miname20002@gmail.com with your name and a clear statement that you wish to opt out.
         </Text>
 
         <Text style={styles.sectionTitle}>Severability</Text>
@@ -104,7 +104,7 @@ export default function TosScreen() {
         </Text>
 
         <Text style={styles.sectionTitle}>Contact</Text>
-        <Text style={styles.body}>Questions, data deletion requests, or feedback: [support email]</Text>
+        <Text style={styles.body}>Questions, data deletion requests, or feedback: miname20002@gmail.com</Text>
 
         <Text style={styles.footerNote}>
           This is a general template and has not been reviewed by a lawyer. Review with legal counsel
