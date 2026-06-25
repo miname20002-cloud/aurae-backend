@@ -1066,6 +1066,7 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {!showIntroOverlay && (
         <View style={styles.header}>
           <View style={styles.headerSide}>
             <View style={styles.avatarStack}>
@@ -1215,6 +1216,7 @@ export default function ChatScreen() {
             )}
           </View>
         </View>
+        )}
 
         <FlatList
           ref={listRef}
