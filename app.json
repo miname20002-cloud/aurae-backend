@@ -31,7 +31,8 @@
           "androidAppId": "ca-app-pub-9861327921813724~6755004829",
           "iosAppId": "ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "extra": {
       "router": {},
