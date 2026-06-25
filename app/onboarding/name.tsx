@@ -1,11 +1,35 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 import Screen from "@/components/Screen";
 import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 import { useOnboarding } from "@/context/OnboardingContext";
 
 const NAME_REGEX = /^[a-zA-Z가-힣\s]+$/;
+
+// 알림 권한(OS 다이얼로그)을 온보딩 첫 페이지를 넘어가는 시점에 미리
+// 요청해둔다. 이걸 chat.tsx(인트로 영상 재생 화면)에서 요청하면 다이얼로그가
+// 인트로 영상 위에 끼어들어서 몰입이 깨지기 때문에, 여기서 끝내놓고
+// chat.tsx에서는 "이미 허용됐는지"만 조회해서 토큰 등록만 한다.
+//
+// 실패(거부/시뮬레이터 등)해도 조용히 무시 - 온보딩 진행 자체를 막지 않는다.
+async function requestNotificationPermissionEarly() {
+  try {
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "default",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    if (existingStatus !== "granted") {
+      await Notifications.requestPermissionsAsync();
+    }
+  } catch {
+    // 거부/시뮬레이터 등에서 실패해도 무시
+  }
+}
 
 export default function NameScreen() {
   const router = useRouter();
@@ -27,6 +51,12 @@ export default function NameScreen() {
 
     setError(null);
     setName(trimmed);
+
+    // await 하지 않는다 - 다이얼로그 응답을 기다리느라 다음 화면 전환이
+    // 막히면 안 된다. 사용자가 gender 화면으로 넘어간 직후(=첫 페이지를
+    // 넘어간 시점) 다이얼로그가 뜨고, 그 위에서 응답하면 된다.
+    requestNotificationPermissionEarly();
+
     router.push("/onboarding/gender");
   }
 

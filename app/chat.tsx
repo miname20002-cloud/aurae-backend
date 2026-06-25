@@ -494,31 +494,23 @@ export default function ChatScreen() {
     })();
   }, []);
 
-  // 푸시 알림 권한 요청 + Expo push token 발급/서버 등록.
-  // 실패해도(권한 거부, 시뮬레이터, iOS Expo Go의 원격푸시 미지원 등) 채팅
-  // 자체엔 영향 없게 조용히 무시한다 - send_reminders.py(스트릭 리마인더/
-  // 선제문자 cron)가 이 토큰으로 발송 대상을 찾는다.
+  // 푸시 알림 토큰 발급/서버 등록.
+  // ⚠️ 권한 요청(다이얼로그를 띄우는 requestPermissionsAsync)은 여기서 더 이상
+  // 하지 않는다 - 그건 onboarding 첫 페이지(app/onboarding/name.tsx, "Next"
+  // 누르는 시점)에서 이미 끝내놨다. 이 화면(인트로 영상이 막 시작되는 시점)
+  // 에서 권한 다이얼로그를 또 띄우면, 다이얼로그가 인트로 영상 위에 끼어들고
+  // 그 뒤에 채팅 헤더가 그대로 노출된 채로 떠 있는 문제가 생긴다.
+  // 여기서는 "이미 허용됐는지"만 조용히 확인해서 토큰만 등록한다.
   useEffect(() => {
     (async () => {
       try {
-        if (Platform.OS === "android") {
-          await Notifications.setNotificationChannelAsync("default", {
-            name: "default",
-            importance: Notifications.AndroidImportance.DEFAULT,
-          });
-        }
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== "granted") {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-        if (finalStatus !== "granted") return;
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== "granted") return;
 
         const tokenData = await Notifications.getExpoPushTokenAsync();
         await registerPushToken(tokenData.data);
       } catch {
-        // 권한 거부/시뮬레이터/iOS Expo Go 등에서 실패해도 무시
+        // 시뮬레이터/iOS Expo Go 등에서 실패해도 무시
       }
     })();
   }, []);
