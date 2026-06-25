@@ -1,1 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurae 다운로드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/[email protected]/lib/qr-code-styling.js"></script>
+<style>
+  :root {
+    --bg: #0b0b14;
+    --card: #15141f;
+    --card-border: #232233;
+    --accent: #8b7cf6;
+    --accent-soft: rgba(139, 124, 246, 0.35);
+    --text: #f1efff;
+    --text-dim: #9c97b8;
+    --teal: #5fae96;
+  }
 
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* ambient aurora glow - the one signature element, kept subtle */
+  body::before {
+    content: "";
+    position: absolute;
+    top: -20%;
+    left: 50%;
+    width: 600px;
+    height: 600px;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, var(--accent-soft) 0%, transparent 70%);
+    filter: blur(40px);
+    animation: drift 8s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  @keyframes drift {
+    from { opacity: 0.5; transform: translateX(-50%) translateY(0); }
+    to   { opacity: 0.85; transform: translateX(-50%) translateY(20px); }
+  }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 380px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 36px 28px 32px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+
+  .wordmark {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, #ffffff, var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin: 0;
+  }
+
+  .tagline {
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    margin: 4px 0 28px;
+    text-transform: lowercase;
+  }
+
+  .qr-frame {
+    width: 220px;
+    height: 220px;
+    margin: 0 auto 22px;
+    padding: 14px;
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 0 0 1px var(--card-border), 0 0 40px var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .qr-frame svg, .qr-frame canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+  }
+
+  .instructions {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+
+  .download-btn {
+    display: inline-block;
+    width: 100%;
+    padding: 14px 0;
+    background: var(--accent);
+    color: #0b0b14;
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    text-decoration: none;
+    border-radius: 14px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .download-btn:active {
+    transform: scale(0.98);
+  }
+
+  .meta {
+    margin-top: 22px;
+    font-size: 12px;
+    color: var(--text-dim);
+    border-top: 1px solid var(--card-border);
+    padding-top: 16px;
+  }
+
+  .meta .build-id {
+    color: var(--teal);
+    font-family: monospace;
+  }
+
+  .footer-note {
+    margin-top: 18px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.7;
+    line-height: 1.5;
+  }
+
+  .beta-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: rgba(139, 124, 246, 0.08);
+    border: 1px solid var(--accent-soft);
+    border-radius: 12px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .beta-note strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .beta-note a {
+    color: var(--teal);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .beta-note a:active {
+    opacity: 0.7;
+  }
+
+  .footer-note .warn {
+    color: #FFB84D;
+    font-weight: 700;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::before { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="card">
+    <h1 class="wordmark">aurae</h1>
+    <p class="tagline">souls, connected.</p>
+
+    <div class="qr-frame" id="qrFrame"></div>
+
+    <p class="instructions">
+      카메라로 QR을 스캔하거나<br>
+      아래 버튼을 눌러 빌드 페이지로 이동하세요
+    </p>
+
+    <a id="downloadBtn" class="download-btn" href="#">다운로드 페이지 열기</a>
+
+    <div class="meta">
+      빌드 번호 <span class="build-id" id="buildLabel">a9383a9b</span>
+    </div>
+
+    <p class="footer-note">
+      내부 테스트용 배포입니다. Play 스토어 외부 설치이므로<br>
+      <span class="warn">"출처를 알 수 없는 앱"</span> 경고가 뜨면 허용 후 설치해 주세요.
+    </p>
+
+    <div class="beta-note">
+      <strong>현재 aurae 오픈베타 서비스 중입니다.</strong><br>
+      사용 중 오류가 발생할 수 있습니다. 발생 시
+      <a href="mailto:[email protected]">[email protected]</a>로 신고 바랍니다.
+    </div>
+  </div>
+
+  <script>
+    // ====== 매 빌드마다 이 두 줄만 수정하세요 ======
+    const DOWNLOAD_URL = "https://expo.dev/accounts/aurae5347/projects/aurae-app/builds/a9383a9b-909c-42e2-ae18-184c5a514df7";
+    const BUILD_LABEL = "a9383a9b";
+    // ================================================
+
+    document.getElementById('buildLabel').textContent = BUILD_LABEL;
+    document.getElementById('downloadBtn').href = DOWNLOAD_URL;
+
+    // 중앙에 aurae 로고("a" 마크)를 박은 QR. 에러 정정 레벨을 H로 올려서
+    // 중앙 30%가 로고로 가려져도 스캔이 끊기지 않게 한다.
+    const LOGO_SVG =
+      'data:image/svg+xml;utf8,' +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+        '<rect width="100" height="100" rx="24" fill="#8b7cf6"/>' +
+        '<text x="50" y="70" font-family="Georgia, \'Times New Roman\', serif" ' +
+        'font-size="62" font-weight="700" fill="#ffffff" text-anchor="middle">a</text>' +
+        '</svg>'
+      );
+
+    const qrCode = new QRCodeStyling({
+      width: 300,
+      height: 300,
+      type: "svg",
+      data: DOWNLOAD_URL,
+      image: LOGO_SVG,
+      margin: 0,
+      qrOptions: {
+        errorCorrectionLevel: "H",
+      },
+      dotsOptions: {
+        color: "#15141f",
+        type: "rounded",
+      },
+      backgroundOptions: {
+        color: "#ffffff",
+      },
+      cornersSquareOptions: {
+        color: "#8b7cf6",
+        type: "extra-rounded",
+      },
+      cornersDotOptions: {
+        color: "#8b7cf6",
+        type: "dot",
+      },
+      imageOptions: {
+        crossOrigin: "anonymous",
+        margin: 6,
+        imageSize: 0.4,
+        hideBackgroundDots: true,
+      },
+    });
+
+    qrCode.append(document.getElementById("qrFrame"));
+  </script>
+
+</body>
+</html>
