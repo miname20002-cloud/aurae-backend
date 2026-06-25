@@ -105,7 +105,7 @@ INSIGHT_REFRESH_INTERVAL = 6
 # the leveling formula itself ever changing.
 TRUST_MARKERS_PER_LEVEL = 3
 
-FREE_DAILY_MESSAGE_LIMIT = 25
+FREE_DAILY_MESSAGE_LIMIT = 2  # TEMP: 광고 테스트용, 확인 끝나면 25로 복구
 # Premium is marketed as "unlimited" - this cap is a sanity ceiling against
 # extreme abuse, not the real cost control (see PREMIUM_SONNET_DAILY_THRESHOLD
 # below for that). Tightened from 300 -> 150 after unit-economics review.
