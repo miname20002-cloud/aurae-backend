@@ -6,7 +6,7 @@
 <title>Aurae 다운로드</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/[email protected]/lib/qr-code-styling.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qr-code-styling/lib/qr-code-styling.js"></script>
 <style>
   :root {
     --bg: #0b0b14;
@@ -217,7 +217,7 @@
     <div class="beta-note">
       <strong>현재 aurae 오픈베타 서비스 중입니다.</strong><br>
       사용 중 오류가 발생할 수 있습니다. 발생 시
-      <a href="mailto:[email protected]">[email protected]</a>로 신고 바랍니다.
+      <a id="reportEmail" href="#">메일</a>로 신고 바랍니다.
     </div>
   </div>
 
@@ -229,6 +229,16 @@
 
     document.getElementById('buildLabel').textContent = BUILD_LABEL;
     document.getElementById('downloadBtn').href = DOWNLOAD_URL;
+
+    // 이메일을 조각으로 나눠서 조립 - 정적 텍스트에 "단어@단어.단어" 형태가
+    // 그대로 남아있으면 일부 환경에서 placeholder로 치환되는 문제가 있어서,
+    // 런타임에 조립해서 채운다.
+    const REPORT_USER = "miname20002";
+    const REPORT_DOMAIN = "gmail" + "." + "com";
+    const REPORT_EMAIL = REPORT_USER + "@" + REPORT_DOMAIN;
+    const reportLink = document.getElementById('reportEmail');
+    reportLink.href = "mailto:" + REPORT_EMAIL;
+    reportLink.textContent = REPORT_EMAIL;
 
     // 중앙에 aurae 로고("a" 마크)를 박은 QR. 에러 정정 레벨을 H로 올려서
     // 중앙 30%가 로고로 가려져도 스캔이 끊기지 않게 한다.
