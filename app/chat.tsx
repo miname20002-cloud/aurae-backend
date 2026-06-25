@@ -928,30 +928,29 @@ export default function ChatScreen() {
 
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
-      <Animated.View
-        style={[styles.introOverlay, introOverlayAnimatedStyle]}
-        pointerEvents={showIntroOverlay ? "auto" : "none"}
-      >
-        <VideoView
-          player={introPlayer}
-          style={styles.introOverlayVideo}
-          contentFit="cover"
-          nativeControls={false}
-        />
-        <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
-        <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
-          {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
-            <Sparkle
-              key={i}
-              progress={sparkleProgress}
-              angle={(i / SPARKLE_COUNT) * Math.PI * 2}
-              color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
-              radius={140}
-              size={14}
-            />
-          ))}
-        </View>
-      </Animated.View>
+      <Modal visible={showIntroOverlay} transparent animationType="none" statusBarTranslucent>
+        <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
+          <VideoView
+            player={introPlayer}
+            style={styles.introOverlayVideo}
+            contentFit="cover"
+            nativeControls={false}
+          />
+          <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
+          <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
+            {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+              <Sparkle
+                key={i}
+                progress={sparkleProgress}
+                angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+                color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+                radius={140}
+                size={14}
+              />
+            ))}
+          </View>
+        </Animated.View>
+      </Modal>
 
       {showFullscreenClip && (
         <View style={styles.fullscreenClipOverlay}>
