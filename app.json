@@ -25,6 +25,8 @@
       "expo-secure-store",
       "expo-video",
       "expo-font",
+      ["expo-navigation-bar", { "enforceContrast": false, "barStyle": "light" }],
+      "./plugins/withNavBarFix.js",
       [
         "react-native-google-mobile-ads",
         {
