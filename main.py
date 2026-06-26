@@ -20,7 +20,11 @@ import realtime_search
 import resonance
 import rewards
 import safety
-from db import User, ChatMessage, UserInsightProfile, UsageLog, get_engine, get_session
+from db import (
+    User, ChatMessage, UserInsightProfile, UsageLog,
+    AdWatchEvent, LimitReachedEvent, SubscriptionEvent,
+    get_engine, get_session,
+)
 
 app = FastAPI(title="Aurae")
 
@@ -131,6 +135,8 @@ VVIP_TIER_REPLY_MODEL = claude_client.MODEL
 # 노출 빈도가 광고 수익에 더 직접적으로 기여한다.)
 AD_BONUS_MESSAGES = 3
 AD_BONUS_MAX_PER_DAY = 3
+# 광고 1회 완료 시 가정 수익 (USD). 실제 AdMob 콘솔 eCPM 확인 후 교체.
+ASSUMED_AD_ECPM = 0.01
 
 LIMIT_REACHED_REPLY = (
     "{name} smiles. \"hey, you've used up today's messages with me - I'll be right "
@@ -256,6 +262,27 @@ def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id), ses
 
     user.ad_bonus_count += 1
     user.daily_message_count = max(0, user.daily_message_count - AD_BONUS_MESSAGES)
+
+    # 위치 A: 광고 시청 완료 → AdWatchEvent 기록, 대기 중인 LimitReachedEvent → "watched_ad" 업데이트
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    pending_limit_event = (
+        session.query(LimitReachedEvent)
+        .filter(
+            LimitReachedEvent.user_id == user.id,
+            LimitReachedEvent.reached_at >= today_start,
+            LimitReachedEvent.action_taken.is_(None),
+        )
+        .order_by(LimitReachedEvent.reached_at.desc())
+        .first()
+    )
+    if pending_limit_event:
+        pending_limit_event.action_taken = "watched_ad"
+    session.add(AdWatchEvent(
+        user_id=user.id,
+        completed=True,
+        reward_granted=True,
+        daily_count_at_watch=user.ad_bonus_count,
+    ))
     session.commit()
 
     return {
@@ -264,6 +291,71 @@ def watch_ad_bonus(current_user_id: int = Depends(auth.get_current_user_id), ses
         "daily_message_count": user.daily_message_count,
         "daily_limit": FREE_DAILY_MESSAGE_LIMIT,
     }
+
+
+class SubscriptionEventRequest(BaseModel):
+    event_type: str   # "start" | "renew" | "cancel" | "downgrade"
+    tier: str         # "premium" | "vvip"
+    mrr_amount: float  # cancel/downgrade이면 0
+
+
+@app.post("/subscriptions/event")
+def record_subscription_event(
+    req: SubscriptionEventRequest,
+    current_user_id: int = Depends(auth.get_current_user_id),
+    session=Depends(get_db),
+):
+    """
+    구독 시작/갱신/해지/다운그레이드를 기록하고 user.tier를 반영합니다.
+
+    TODO: 실제 PG 또는 RevenueCat 연동 후 이 엔드포인트를 webhook 수신처로 연결하세요.
+    - RevenueCat webhook 설정: https://www.revenuecat.com/docs/integrations/webhooks
+    - 이벤트 타입 매핑:
+        INITIAL_PURCHASE  → event_type="start"
+        RENEWAL           → event_type="renew"
+        CANCELLATION      → event_type="cancel"
+        PRODUCT_CHANGE    → event_type="downgrade" (또는 "start" with new tier)
+    - webhook secret 검증(X-RevenueCat-Signature 헤더)은 보안 필수 - 론칭 전 추가 필요.
+    현재는 JWT 인증된 클라이언트가 직접 호출하는 더미 엔드포인트입니다.
+    """
+    if req.event_type not in ("start", "renew", "cancel", "downgrade"):
+        raise HTTPException(status_code=400, detail="event_type must be start/renew/cancel/downgrade.")
+    if req.tier not in ("premium", "vvip"):
+        raise HTTPException(status_code=400, detail="tier must be premium or vvip.")
+
+    user = session.get(User, current_user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if req.event_type in ("start", "renew"):
+        user.tier = req.tier
+    elif req.event_type in ("cancel", "downgrade"):
+        user.tier = "free"
+
+    # 위치 B-2: 업그레이드 시 당일 미해결 LimitReachedEvent → "upgraded" 업데이트
+    if req.event_type == "start":
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        pending_limit_event = (
+            session.query(LimitReachedEvent)
+            .filter(
+                LimitReachedEvent.user_id == user.id,
+                LimitReachedEvent.reached_at >= today_start,
+                LimitReachedEvent.action_taken.is_(None),
+            )
+            .order_by(LimitReachedEvent.reached_at.desc())
+            .first()
+        )
+        if pending_limit_event:
+            pending_limit_event.action_taken = "upgraded"
+
+    session.add(SubscriptionEvent(
+        user_id=user.id,
+        event_type=req.event_type,
+        tier=req.tier,
+        mrr_amount=req.mrr_amount,
+    ))
+    session.commit()
+    return {"ok": True, "tier": user.tier}
 
 
 @app.get("/admin/users/{user_id}/messages")
@@ -359,6 +451,187 @@ def admin_usage_report(x_admin_key: str = Header(None), session=Depends(get_db))
             {"endpoint": endpoint, "cost_usd": round(cost or 0.0, 4), "calls": count}
             for endpoint, cost, count in by_endpoint
         ],
+    }
+
+
+@app.get("/admin/economics-report")
+def admin_economics_report(
+    start_date: str = None,
+    end_date: str = None,
+    x_admin_key: str = Header(None),
+    session=Depends(get_db),
+):
+    """
+    Unit economics 리포트: ARPU vs 비용(Contribution Margin), 손익분기 DAU 역산,
+    한도→광고/업그레이드 전환 퍼널. ADMIN_API_KEY 헤더(x-admin-key)로만 접근 가능.
+
+    기본 기간: 최근 7일. start_date/end_date는 YYYY-MM-DD 형식.
+
+    NOTE: cost.by_tier는 UsageLog를 현재 User.tier에 조인하므로 기간 중 티어 변경이
+    있는 유저는 현재 티어 기준으로 집계됩니다. CBT 소규모 단계에서 허용 가능한 근사치.
+    """
+    if not ADMIN_API_KEY or x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    end_dt = (
+        datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+        if end_date
+        else datetime.utcnow()
+    )
+    start_dt = (
+        datetime.fromisoformat(start_date).replace(hour=0, minute=0, second=0)
+        if start_date
+        else end_dt - timedelta(days=7)
+    )
+
+    # --- cost ---
+    cost_total = (
+        session.query(func.sum(UsageLog.estimated_cost_usd))
+        .filter(UsageLog.created_at >= start_dt, UsageLog.created_at <= end_dt)
+        .scalar() or 0.0
+    )
+
+    cost_by_char_rows = (
+        session.query(UsageLog.character, func.sum(UsageLog.estimated_cost_usd))
+        .filter(
+            UsageLog.created_at >= start_dt,
+            UsageLog.created_at <= end_dt,
+            UsageLog.character.isnot(None),
+        )
+        .group_by(UsageLog.character)
+        .all()
+    )
+    cost_by_char = {"chloe": 0.0, "maya": 0.0, "ethan": 0.0, "jayden": 0.0}
+    for char, cost in cost_by_char_rows:
+        if char in cost_by_char:
+            cost_by_char[char] = round(cost or 0.0, 6)
+
+    cost_by_tier_rows = (
+        session.query(User.tier, func.sum(UsageLog.estimated_cost_usd))
+        .join(User, UsageLog.user_id == User.id)
+        .filter(
+            UsageLog.created_at >= start_dt,
+            UsageLog.created_at <= end_dt,
+            UsageLog.user_id.isnot(None),
+        )
+        .group_by(User.tier)
+        .all()
+    )
+    cost_by_tier = {"free": 0.0, "premium": 0.0, "vvip": 0.0}
+    for tier, cost in cost_by_tier_rows:
+        if tier in cost_by_tier:
+            cost_by_tier[tier] = round(cost or 0.0, 6)
+
+    # --- revenue ---
+    ad_count = (
+        session.query(func.count(AdWatchEvent.id))
+        .filter(
+            AdWatchEvent.completed.is_(True),
+            AdWatchEvent.watched_at >= start_dt,
+            AdWatchEvent.watched_at <= end_dt,
+        )
+        .scalar() or 0
+    )
+    ad_estimated = round(ad_count * ASSUMED_AD_ECPM, 6)
+
+    # MRR 스냅샷: end_dt 시점에서 각 유저의 가장 최근 구독 이벤트가 start/renew인 경우만 합산
+    latest_sub_subq = (
+        session.query(
+            SubscriptionEvent.user_id,
+            func.max(SubscriptionEvent.event_at).label("latest_at"),
+        )
+        .filter(SubscriptionEvent.event_at <= end_dt)
+        .group_by(SubscriptionEvent.user_id)
+        .subquery()
+    )
+    active_subs = (
+        session.query(SubscriptionEvent)
+        .join(
+            latest_sub_subq,
+            (SubscriptionEvent.user_id == latest_sub_subq.c.user_id)
+            & (SubscriptionEvent.event_at == latest_sub_subq.c.latest_at),
+        )
+        .filter(SubscriptionEvent.event_type.in_(["start", "renew"]))
+        .all()
+    )
+    subscription_mrr = round(sum(s.mrr_amount or 0.0 for s in active_subs), 2)
+    revenue_total = round(ad_estimated + subscription_mrr, 6)
+
+    # --- users ---
+    total_active = (
+        session.query(func.count(func.distinct(ChatMessage.user_id)))
+        .filter(
+            ChatMessage.created_at >= start_dt,
+            ChatMessage.created_at <= end_dt,
+            ChatMessage.role == "user",
+        )
+        .scalar() or 0
+    )
+    arpu = round(revenue_total / total_active, 6) if total_active else 0.0
+    cost_per_user = round(cost_total / total_active, 6) if total_active else 0.0
+    contribution_margin = round(arpu - cost_per_user, 6)
+
+    # --- limit funnel ---
+    reached = (
+        session.query(func.count(LimitReachedEvent.id))
+        .filter(LimitReachedEvent.reached_at >= start_dt, LimitReachedEvent.reached_at <= end_dt)
+        .scalar() or 0
+    )
+    watched_ad_count = (
+        session.query(func.count(LimitReachedEvent.id))
+        .filter(
+            LimitReachedEvent.reached_at >= start_dt,
+            LimitReachedEvent.reached_at <= end_dt,
+            LimitReachedEvent.action_taken == "watched_ad",
+        )
+        .scalar() or 0
+    )
+    upgraded_count = (
+        session.query(func.count(LimitReachedEvent.id))
+        .filter(
+            LimitReachedEvent.reached_at >= start_dt,
+            LimitReachedEvent.reached_at <= end_dt,
+            LimitReachedEvent.action_taken == "upgraded",
+        )
+        .scalar() or 0
+    )
+    gave_up = max(0, reached - watched_ad_count - upgraded_count)
+
+    # 손익분기 DAU: 고정비 / contribution_margin
+    # TODO: MONTHLY_FIXED_COST_USD 환경변수에 실제 서버/운영 고정비(USD) 입력 시 자동 계산
+    monthly_fixed = os.environ.get("MONTHLY_FIXED_COST_USD")
+    if monthly_fixed and contribution_margin > 0:
+        breakeven_dau = int(float(monthly_fixed) / 30 / contribution_margin)
+    else:
+        breakeven_dau = None  # 고정비 입력 필요 (MONTHLY_FIXED_COST_USD 환경변수)
+
+    return {
+        "period": {"start": start_dt.isoformat(), "end": end_dt.isoformat()},
+        "cost": {
+            "total": round(cost_total, 6),
+            "by_character": cost_by_char,
+            "by_tier": cost_by_tier,
+        },
+        "revenue": {
+            "ad_estimated": ad_estimated,
+            "ad_completed_views": ad_count,
+            "assumed_ad_ecpm": ASSUMED_AD_ECPM,
+            "subscription_mrr": subscription_mrr,
+            "total": revenue_total,
+        },
+        "users": {
+            "total_active": total_active,
+            "arpu": arpu,
+            "cost_per_user": cost_per_user,
+            "contribution_margin": contribution_margin,
+        },
+        "limit_funnel": {
+            "reached": reached,
+            "watched_ad": watched_ad_count,
+            "upgraded": upgraded_count,
+            "gave_up": gave_up,
+        },
+        "breakeven_dau_estimate": breakeven_dau,
     }
 
 
@@ -677,6 +950,23 @@ def chat(
         reply_template = PREMIUM_LIMIT_REACHED_REPLY if user.tier in ("premium", "vvip") else LIMIT_REACHED_REPLY
         reply = reply_template.format(name=persona["name"])
         asset_path = asset_map.resolve_asset(user.companion_id, "neutral", user.last_emotion_asset)
+
+        # 위치 B: 한도 첫 도달 시 1회만 기록. 이미 미해결 이벤트가 있으면 스킵
+        # (광고 시청 후 추가 메시지를 소진하고 다시 한도에 도달하면 새 이벤트 생성).
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        already_logged = (
+            session.query(LimitReachedEvent)
+            .filter(
+                LimitReachedEvent.user_id == user.id,
+                LimitReachedEvent.reached_at >= today_start,
+                LimitReachedEvent.action_taken.is_(None),
+            )
+            .first()
+        )
+        if not already_logged:
+            session.add(LimitReachedEvent(user_id=user.id, tier_at_time=user.tier))
+            session.commit()
+
         return {
             "reply": reply,
             "mood": "neutral",

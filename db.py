@@ -114,6 +114,35 @@ class UsageLog(Base):
     estimated_cost_usd = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User")
+class AdWatchEvent(Base):
+    __tablename__ = "ad_watch_events"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    watched_at = Column(DateTime, default=datetime.utcnow, index=True)
+    completed = Column(Boolean, default=False)
+    reward_granted = Column(Boolean, default=False)
+    daily_count_at_watch = Column(Integer)  # 그날 몇 번째 시청인지 (1~AD_BONUS_MAX_PER_DAY)
+
+
+class LimitReachedEvent(Base):
+    __tablename__ = "limit_reached_events"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    reached_at = Column(DateTime, default=datetime.utcnow, index=True)
+    tier_at_time = Column(String)            # "free" | "premium" | "vvip"
+    action_taken = Column(String, nullable=True)  # "watched_ad" | "upgraded" | None(=포기)
+
+
+class SubscriptionEvent(Base):
+    __tablename__ = "subscription_events"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    event_type = Column(String, nullable=False)  # "start" | "renew" | "cancel" | "downgrade"
+    tier = Column(String, nullable=False)         # "premium" | "vvip"
+    mrr_amount = Column(Float)                    # cancel/downgrade이면 0
+    event_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 def get_engine(db_url="sqlite:///aurae.db"):
     engine = create_engine(
         db_url,
