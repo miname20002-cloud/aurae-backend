@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('version:', d.get\\('version'\\)\\); print\\('codegenConfig:', 'YES' if d.get\\('codegenConfig'\\) else 'NO'\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('expo-video:', d.get\\('version'\\)\\); print\\('codegenConfig:', 'YES' if d.get\\('codegenConfig'\\) else 'NO'\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('reanimated:', d.get\\('version'\\)\\); print\\('codegenConfig:', 'YES' if d.get\\('codegenConfig'\\) else 'NO'\\)\")"
+    ]
+  }
+}
