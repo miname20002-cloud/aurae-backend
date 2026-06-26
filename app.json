@@ -20,6 +20,9 @@
         "backgroundColor": "#0B0B12"
       }
     },
+    "androidNavigationBar": {
+      "enforceContrast": false
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",

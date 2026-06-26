@@ -1,27 +1,26 @@
-// SDK 54 known bug workaround (expo/expo#43741):
-// app.json의 androidNavigationBar 필드가 스키마에서 거부되면서
-// prebuild 시 enforceNavigationBarContrast가 항상 true로 생성됨.
-// 이 플러그인이 styles.xml을 직접 패치해서 false로 강제 설정함.
-// setStyle("dark")가 실제 효과를 내려면 이 값이 false여야 함.
-const { withAndroidStyles } = require("@expo/config-plugins");
+// SDK 54 edge-to-edge 흰색 네비게이션 바 방어 플러그인.
+//
+// 1차 방어 (app.json): "androidNavigationBar": { "enforceContrast": false }
+//   → SDK의 withEnforceNavigationBarContrast(config, false) 경로를 타서 설정.
+//
+// 2차 방어 (이 플러그인): 위 설정이 어떤 이유로 무시될 경우를 대비한 안전망.
+//   withAndroidStyles를 사용하므로 styles 페이즈에서 실행되어
+//   withEnforceNavigationBarContrast(true)보다 나중에 적용됨.
+//
+// 추가로 원하는 windowLightNavigationBar / navigationBarColor는
+// SDK 언버전드 플러그인(withVersionedExpoSDKPlugins → expo-navigation-bar)이
+// 우리 플러그인 이후에 실행되어 항상 제거됨 → 런타임에서 처리:
+//   _layout.tsx: NavigationBar.setStyle("dark")
+const { withAndroidStyles, AndroidConfig } = require("@expo/config-plugins");
 
 module.exports = function withNavBarFix(config) {
   return withAndroidStyles(config, (config) => {
-    const appTheme = config.modResults.resources.style?.find(
-      (s) => s.$?.name === "AppTheme"
-    );
-    if (appTheme) {
-      appTheme.item = appTheme.item ?? [];
-      const already = appTheme.item.find(
-        (i) => i.$?.name === "android:enforceNavigationBarContrast"
-      );
-      if (!already) {
-        appTheme.item.push({
-          $: { name: "android:enforceNavigationBarContrast" },
-          _: "false",
-        });
-      }
-    }
+    config.modResults = AndroidConfig.Styles.assignStylesValue(config.modResults, {
+      add: true,
+      parent: AndroidConfig.Styles.getAppThemeGroup(),
+      name: "android:enforceNavigationBarContrast",
+      value: "false",
+    });
     return config;
   });
 };

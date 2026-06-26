@@ -725,6 +725,20 @@ export default function ChatScreen() {
           // 전부터) 오버레이를 먼저 띄워서 평소 화면이 한 프레임도 안
           // 보이게 한다.
           greetingTried.current = true;
+
+          // 온보딩을 건너뛴 기존 유저(device_id 매칭)는 name.tsx의 권한 요청을
+          // 거치지 않았을 수 있다. 인트로 영상이 시작되기 전에 여기서 조용히
+          // 확인해서, 다이얼로그가 인트로 위에 끼어드는 걸 방지한다.
+          // "undetermined"일 때만 물어보고, 거부 상태면 조용히 넘어간다.
+          try {
+            const { status: permStatus } = await Notifications.getPermissionsAsync();
+            if (permStatus === "undetermined") {
+              await Notifications.requestPermissionsAsync();
+            }
+          } catch {
+            // 시뮬레이터 등 실패해도 인트로는 정상 진행
+          }
+
           setShowIntroOverlay(true);
           introOverlayOpacity.value = 1;
 
@@ -1066,7 +1080,7 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {!showIntroOverlay && (
+        {!showIntroOverlay && !showFullscreenClip && (
         <View style={styles.header}>
           <View style={styles.headerSide}>
             <View style={styles.avatarStack}>
@@ -1404,6 +1418,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 199,
+    elevation: 199,  // Android는 elevation으로 z-order를 결정 — 없으면 헤더가 위에 그려짐
     backgroundColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
