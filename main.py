@@ -88,7 +88,7 @@ limiter = Limiter(key_func=get_real_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json")))
+PERSONAS = json.load(open(os.path.join(os.path.dirname(__file__), "personas.json"), encoding="utf-8"))
 
 # 분쟁 대응(모함/허위 스크린샷 대응 등)용 admin 조회 엔드포인트 보호 키.
 # Render 대시보드 환경변수에 ADMIN_API_KEY를 직접 설정하세요 - 코드에 값을
