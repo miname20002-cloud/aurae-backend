@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { Slot } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import * as NavigationBar from "expo-navigation-bar";
 import * as Sentry from "@sentry/react-native";
 import { OnboardingProvider } from "@/context/OnboardingContext";
 import { API_BASE_URL } from "@/lib/api";
@@ -19,11 +18,6 @@ Sentry.init({
 
 function RootLayout() {
   useEffect(() => {
-    // SDK 54+ edge-to-edge 기본 활성 → 네비게이션 바가 흰색으로 보이는 버그 방지.
-    // "dark" = 어두운 배경에 밝은(흰색) 버튼 아이콘. enforceNavigationBarContrast가
-    // false여야 효과 있음 — withNavBarFix.js 플러그인이 styles.xml에서 보장.
-    NavigationBar.setStyle("dark");
-
     // Render 무료 플랜은 비활성 상태면 슬립 모드로 들어가요. 앱이 켜지는 순간
     // 미리 가벼운 요청을 보내서, 유저가 캐릭터 선택/채팅 화면에 도달할 즈음엔
     // 서버가 이미 깨어있도록 만들어요. 실패해도 무시 - 그냥 워밍업용.
