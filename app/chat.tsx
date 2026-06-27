@@ -514,7 +514,7 @@ export default function ChatScreen() {
     transform: [{ scale: paletteScale.value }],
   }));
 
-  useEffect(() => {
+      useEffect(() => {
     if (showIntroOverlay || showFullscreenClip) {
       StatusBar.setHidden(true, "fade");
       NavigationBar.setVisibilityAsync('hidden');
@@ -522,20 +522,22 @@ export default function ChatScreen() {
       StatusBar.setHidden(false, "fade");
       StatusBar.setBarStyle("light-content", true);
       StatusBar.setBackgroundColor(bgColor, true);
+      NavigationBar.setPositionAsync('absolute');
+      NavigationBar.setBackgroundColorAsync('#00000000');
+      NavigationBar.setButtonStyle('light');
       NavigationBar.setVisibilityAsync('visible');
-      NavigationBar.setBackgroundColorAsync(bgColor);
     }
   }, [showIntroOverlay, showFullscreenClip, bgColor]);
 
   useEffect(() => {
   const hideSub = Keyboard.addListener("keyboardDidHide", () => {
     if (!showIntroOverlay && !showFullscreenClip) {
-      NavigationBar.setBackgroundColorAsync(bgColor);
+      NavigationBar.setBackgroundColorAsync('#00000000');
     }
   });
   const showSub = Keyboard.addListener("keyboardDidShow", () => {
     if (!showIntroOverlay && !showFullscreenClip) {
-      NavigationBar.setBackgroundColorAsync(bgColor);
+      NavigationBar.setBackgroundColorAsync('#00000000');
     }
   });
   return () => {
