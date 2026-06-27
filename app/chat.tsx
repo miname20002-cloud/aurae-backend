@@ -880,29 +880,29 @@ export default function ChatScreen() {
 
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
-      <Modal visible={showIntroOverlay} transparent animationType="none" statusBarTranslucent>
-        <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
-          <VideoView
-            player={introPlayer}
-            style={styles.introOverlayVideo}
-            contentFit="cover"
-            nativeControls={false}
-          />
-          <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
-          <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
-            {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
-              <Sparkle
-                key={i}
-                progress={sparkleProgress}
-                angle={(i / SPARKLE_COUNT) * Math.PI * 2}
-                color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
-                radius={140}
-                size={14}
-              />
-            ))}
-          </View>
-        </Animated.View>
-      </Modal>
+      {showIntroOverlay && (
+  <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
+    <VideoView
+      player={introPlayer}
+      style={styles.introOverlayVideo}
+      contentFit="cover"
+      nativeControls={false}
+    />
+    <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
+    <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
+      {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+        <Sparkle
+          key={i}
+          progress={sparkleProgress}
+          angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+          color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+          radius={140}
+          size={14}
+        />
+      ))}
+    </View>
+  </Animated.View>
+      )}
 
       {showFullscreenClip && (
         <View style={styles.fullscreenClipOverlay}>
@@ -1320,6 +1320,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 200,
+    elevation: 200,
     backgroundColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
@@ -1640,6 +1641,7 @@ const styles = StyleSheet.create({
   settingsButtonInputRow: {
     paddingHorizontal: 4,
     paddingVertical: 2,
+    marginRight: 4,
     position: "relative",
   },
   settingsButtonText: {
@@ -1776,7 +1778,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
