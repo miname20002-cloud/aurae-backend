@@ -19,7 +19,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import Svg, { Defs, Mask, Rect, Circle, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Defs, Mask, Rect, Circle, RadialGradient, Stop, Path } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -267,6 +267,14 @@ function Gauge({
   );
 }
 
+function coachBubbleTailDownPath(w: number, h: number): string {
+  return `M${w * 0.06},${h * 0.34} Q${w * 0.0},${h * 0.18} ${w * 0.16},${h * 0.08} Q${w * 0.3},${h * -0.02} ${w * 0.46},${h * 0.05} Q${w * 0.6},${h * -0.03} ${w * 0.74},${h * 0.06} Q${w * 0.9},${h * 0.0} ${w * 0.96},${h * 0.16} Q${w * 1.02},${h * 0.32} ${w * 0.94},${h * 0.46} Q${w * 1.0},${h * 0.6} ${w * 0.92},${h * 0.72} Q${w * 0.98},${h * 0.84} ${w * 0.8},${h * 0.88} L${w * 0.58},${h * 0.9} L${w * 0.5},${h * 1.06} L${w * 0.42},${h * 0.9} L${w * 0.2},${h * 0.9} Q${w * 0.04},${h * 0.86} ${w * 0.02},${h * 0.7} Q${w * -0.04},${h * 0.55} ${w * 0.02},${h * 0.42} Q${w * -0.02},${h * 0.36} ${w * 0.06},${h * 0.34} Z`;
+}
+
+function coachBubbleTailUpPath(w: number, h: number): string {
+  return `M${w * 0.06},${h * 0.66} Q${w * 0.0},${h * 0.82} ${w * 0.16},${h * 0.92} Q${w * 0.3},${h * 1.02} ${w * 0.46},${h * 0.95} Q${w * 0.6},${h * 1.03} ${w * 0.74},${h * 0.94} Q${w * 0.9},${h * 1.0} ${w * 0.96},${h * 0.84} Q${w * 1.02},${h * 0.68} ${w * 0.94},${h * 0.54} Q${w * 1.0},${h * 0.4} ${w * 0.92},${h * 0.28} Q${w * 0.98},${h * 0.16} ${w * 0.8},${h * 0.12} L${w * 0.58},${h * 0.1} L${w * 0.5},${h * -0.06} L${w * 0.42},${h * 0.1} L${w * 0.2},${h * 0.1} Q${w * 0.04},${h * 0.14} ${w * 0.02},${h * 0.3} Q${w * -0.04},${h * 0.45} ${w * 0.02},${h * 0.58} Q${w * -0.02},${h * 0.64} ${w * 0.06},${h * 0.66} Z`;
+}
+
 export default function ChatScreen() {
   const { companion: companionName } = useLocalSearchParams<{
     userId: string;
@@ -326,6 +334,7 @@ export default function ChatScreen() {
   const [coachTarget, setCoachTarget] = useState<{ x: number; y: number; width: number; height: number } | null>(
     null
   );
+  const [bubbleContentSize, setBubbleContentSize] = useState({ width: 0, height: 0 });
   const avatarWrapRef = useRef<View>(null);
   const gaugeStackRef = useRef<View>(null);
   const inputRowRef = useRef<View>(null);
@@ -457,17 +466,17 @@ export default function ChatScreen() {
   }));
 
   useEffect(() => {
-  if (showIntroOverlay || showFullscreenClip) {
-    StatusBar.setHidden(true, "fade");
-    NavigationBar.setVisibilityAsync('hidden');
-  } else {
-    StatusBar.setHidden(false, "fade");
-    StatusBar.setBarStyle("light-content", true);
-    StatusBar.setBackgroundColor(bgColor, true);
-    NavigationBar.setVisibilityAsync('visible');
-    NavigationBar.setBackgroundColorAsync(bgColor);
-  }
-}, [showIntroOverlay, showFullscreenClip, bgColor]);
+    if (showIntroOverlay || showFullscreenClip) {
+      StatusBar.setHidden(true, "fade");
+      NavigationBar.setVisibilityAsync('hidden');
+    } else {
+      StatusBar.setHidden(false, "fade");
+      StatusBar.setBarStyle("light-content", true);
+      StatusBar.setBackgroundColor(bgColor, true);
+      NavigationBar.setVisibilityAsync('visible');
+      NavigationBar.setBackgroundColorAsync(bgColor);
+    }
+  }, [showIntroOverlay, showFullscreenClip, bgColor]);
 
   useEffect(() => {
     (async () => {
@@ -881,27 +890,27 @@ export default function ChatScreen() {
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
       {showIntroOverlay && (
-  <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
-    <VideoView
-      player={introPlayer}
-      style={styles.introOverlayVideo}
-      contentFit="cover"
-      nativeControls={false}
-    />
-    <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
-    <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
-      {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
-        <Sparkle
-          key={i}
-          progress={sparkleProgress}
-          angle={(i / SPARKLE_COUNT) * Math.PI * 2}
-          color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
-          radius={140}
-          size={14}
-        />
-      ))}
-    </View>
-  </Animated.View>
+        <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
+          <VideoView
+            player={introPlayer}
+            style={styles.introOverlayVideo}
+            contentFit="cover"
+            nativeControls={false}
+          />
+          <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
+          <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
+            {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
+              <Sparkle
+                key={i}
+                progress={sparkleProgress}
+                angle={(i / SPARKLE_COUNT) * Math.PI * 2}
+                color={SPARKLE_COLORS[i % SPARKLE_COLORS.length]}
+                radius={140}
+                size={14}
+              />
+            ))}
+          </View>
+        </Animated.View>
       )}
 
       {showFullscreenClip && (
@@ -945,46 +954,59 @@ export default function ChatScreen() {
             pointerEvents="none"
           />
           <View
-          style={[
-            styles.coachBubble,
-            coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-              ? { top: Math.max(70, coachTarget.y - 140) }
-              : { top: coachTarget.y + coachTarget.height + 24 },
-          ]}
-          pointerEvents="none"
-        >
-          <View
-            style={
-              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-                ? styles.coachTailDownOuter
-                : styles.coachTailUpOuter
-            }
-          />
-          <View
-            style={
-              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-                ? styles.coachTailDownInner
-                : styles.coachTailUpInner
-            }
-          />
-          <Text
             style={[
-              styles.coachBubbleText,
-              fontsLoaded && { fontFamily: "Fredoka_700Bold" },
+              styles.coachBubble,
+              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+                ? { top: Math.max(70, coachTarget.y - 140) }
+                : { top: coachTarget.y + coachTarget.height + 24 },
             ]}
+            pointerEvents="none"
           >
-            {coachSteps[coachStep - 1].text}
-          </Text>
-          <View style={styles.coachDots}>
-              {coachSteps.map((step, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.coachDot,
-                    i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
-                  ]}
+            {bubbleContentSize.width > 0 && (
+              <Svg
+                width={bubbleContentSize.width + 24}
+                height={bubbleContentSize.height + 24}
+                viewBox={`0 0 ${bubbleContentSize.width + 24} ${bubbleContentSize.height + 24}`}
+                style={styles.coachBubbleSvg}
+              >
+                <Path
+                  d={
+                    coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+                      ? coachBubbleTailDownPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)
+                      : coachBubbleTailUpPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)
+                  }
+                  fill="#FFFFFF"
+                  stroke="#8B7CF6"
+                  strokeWidth={5}
+                  strokeLinejoin="round"
                 />
-              ))}
+              </Svg>
+            )}
+            <View
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                if (Math.abs(width - bubbleContentSize.width) > 1 || Math.abs(height - bubbleContentSize.height) > 1) {
+                  setBubbleContentSize({ width, height });
+                }
+              }}
+              style={styles.coachBubbleContent}
+            >
+              <Text
+                style={[styles.coachBubbleText, fontsLoaded && { fontFamily: "Fredoka_700Bold" }]}
+              >
+                {coachSteps[coachStep - 1].text}
+              </Text>
+              <View style={styles.coachDots}>
+                {coachSteps.map((step, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.coachDot,
+                      i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
           </View>
           <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
@@ -1426,72 +1448,17 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 24,
     right: 24,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 5,
-    borderColor: "#8B7CF6",
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 28,
+    alignItems: "center",
+  },
+  coachBubbleSvg: {
+    position: "absolute",
+    top: -12,
+    left: -12,
+  },
+  coachBubbleContent: {
     paddingVertical: 20,
     paddingHorizontal: 22,
   },
-  coachTailDownOuter: {
-    position: "absolute",
-    bottom: -17,
-    left: "50%",
-    marginLeft: -16,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 16,
-    borderRightWidth: 16,
-    borderTopWidth: 17,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderTopColor: "#8B7CF6",
-  },
-  coachTailDownInner: {
-    position: "absolute",
-    bottom: -17,
-    left: "50%",
-    marginLeft: -11,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 11,
-    borderRightWidth: 11,
-    borderTopWidth: 12,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderTopColor: "#FFFFFF",
-  },
-  coachTailUpOuter: {
-    position: "absolute",
-    top: -17,
-    left: "50%",
-    marginLeft: -16,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 16,
-    borderRightWidth: 16,
-    borderBottomWidth: 17,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: "#8B7CF6",
-  },
-  coachTailUpInner: {
-    position: "absolute",
-    top: -17,
-    left: "50%",
-    marginLeft: -11,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 11,
-    borderRightWidth: 11,
-    borderBottomWidth: 12,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: "#FFFFFF",
-    },
   coachBubbleText: {
     color: "#241B33",
     fontSize: 16,
