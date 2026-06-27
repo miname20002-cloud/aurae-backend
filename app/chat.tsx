@@ -1001,116 +1001,98 @@ export default function ChatScreen() {
       )}
 
       {coachStep > 0 && coachTarget && (
-  <View style={styles.coachOverlay}>
-    <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
-
-    {/* Highlight */}
-    <View
-      style={[
-        styles.coachHighlight,
-        {
-          left: coachTarget.x - 8,
-          top: coachTarget.y - 8,
-          width: coachTarget.width + 16,
-          height: coachTarget.height + 16,
-          borderRadius:
-            coachStep === 1 || coachStep === 4
-              ? (Math.max(coachTarget.width, coachTarget.height) + 16) / 2
-              : 18,
-          borderColor: coachSteps[coachStep - 1].color,
-          shadowColor: coachSteps[coachStep - 1].color,
-        },
-      ]}
-      pointerEvents="none"
-    />
-
-    {/* 카툰 말풍선 */}
-    <View
-      style={[
-        styles.coachBubble,
-        coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-          ? { top: Math.max(60, coachTarget.y - 160) }
-          : { top: coachTarget.y + coachTarget.height + 28 },
-      ]}
-      pointerEvents="none"
-    >
-      {bubbleContentSize.width > 0 && (
-        <Svg
-          width={bubbleContentSize.width + 52}
-          height={bubbleContentSize.height + 72}
-          viewBox={`0 0 ${bubbleContentSize.width + 52} ${bubbleContentSize.height + 72}`}
-          style={styles.coachBubbleSvg}
-        >
-          {/* 본체 - 찢어진 카툰 스타일 */}
-          <Path
-            d={coachBubbleBodyPath(bubbleContentSize.width + 32, bubbleContentSize.height + 32)}
-            fill="#C084FC"
-            stroke="#4C1D95"
-            strokeWidth={7}
-            strokeLinejoin="round"
+        <View style={styles.coachOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
+          <View
+            style={[
+              styles.coachHighlight,
+              {
+                left: coachTarget.x - 6,
+                top: coachTarget.y - 6,
+                width: coachTarget.width + 12,
+                height: coachTarget.height + 12,
+                borderRadius:
+                  coachStep === 1 || coachStep === 4 || coachStep === 6 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
+                borderColor: coachSteps[coachStep - 1].color,
+                shadowColor: coachSteps[coachStep - 1].color,
+              },
+            ]}
+            pointerEvents="none"
           />
-
-          {/* 꼬리 */}
-          <Path
-            d={coachBubbleTailShapePath(
-              bubbleContentSize.width + 32,
-              bubbleContentSize.height + 32,
-              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "top" : "bottom"
+          <View
+            style={[
+              styles.coachBubble,
+              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+                ? { top: Math.max(70, coachTarget.y - 140) }
+                : { top: coachTarget.y + coachTarget.height + 24 },
+            ]}
+            pointerEvents="none"
+          >
+            {bubbleContentSize.width > 0 && (
+              <Svg
+                width={bubbleContentSize.width + 24 + 56}
+                height={bubbleContentSize.height + 24 + 56}
+                viewBox={`-28 -28 ${bubbleContentSize.width + 24 + 56} ${bubbleContentSize.height + 24 + 56}`}
+                style={styles.coachBubbleSvg}
+              >
+                <Path
+                  d={coachBubbleTailShapePath(
+                    bubbleContentSize.width + 24,
+                    bubbleContentSize.height + 24,
+                    coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "bottom" : "top"
+                  )}
+                  fill="#FFFFFF"
+                  stroke="#8B7CF6"
+                  strokeWidth={5}
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d={coachBubbleBodyPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)}
+                  fill="#FFFFFF"
+                  stroke="#8B7CF6"
+                  strokeWidth={5}
+                  strokeLinejoin="miter"
+                />
+              </Svg>
             )}
-            fill="#C084FC"
-            stroke="#4C1D95"
-            strokeWidth={7}
-          />
-        </Svg>
-      )}
-
-      <View
-        onLayout={(e) => {
-          const { width, height } = e.nativeEvent.layout;
-          if (Math.abs(width - bubbleContentSize.width) > 2 || Math.abs(height - bubbleContentSize.height) > 2) {
-            setBubbleContentSize({ width, height });
-          }
-        }}
-        style={styles.coachBubbleContent}
-      >
-        <Text
-          style={[
-            styles.coachBubbleText,
-            fontsLoaded && { fontFamily: "Fredoka_700Bold" },
-          ]}
-        >
-          {coachSteps[coachStep - 1].text}
-        </Text>
-
-        <View style={styles.coachDots}>
-          {coachSteps.map((step, i) => (
             <View
-              key={i}
-              style={[
-                styles.coachDot,
-                i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
-              ]}
-            />
-          ))}
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                if (Math.abs(width - bubbleContentSize.width) > 1 || Math.abs(height - bubbleContentSize.height) > 1) {
+                  setBubbleContentSize({ width, height });
+                }
+              }}
+              style={styles.coachBubbleContent}
+            >
+              <Text
+                style={[styles.coachBubbleText, fontsLoaded && { fontFamily: "Fredoka_700Bold" }]}
+              >
+                {coachSteps[coachStep - 1].text}
+              </Text>
+              <View style={styles.coachDots}>
+                {coachSteps.map((step, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.coachDot,
+                      i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
+          </View>
+          <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
+            <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>skip</Text>
+          </Pressable>
+          <Text
+            style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}
+            pointerEvents="none"
+          >
+            tap anywhere to continue
+          </Text>
         </View>
-      </View>
-    </View>
-
-    {/* Skip 버튼 - 기존 그대로 */}
-    <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
-      <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>
-        skip
-      </Text>
-    </Pressable>
-
-    <Text
-      style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}
-      pointerEvents="none"
-    >
-      tap anywhere to continue
-    </Text>
-  </View>
-)}
+      )}
 
       <KeyboardAvoidingView
         style={styles.flexFill}
