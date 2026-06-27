@@ -458,12 +458,12 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (showIntroOverlay || showFullscreenClip) {
-      StatusBar.setHidden(true, "none");
+      StatusBar.setHidden(true, "fade");
       NavigationBar.setVisibilityAsync('hidden');
       return;
     }
     const interval = setInterval(() => {
-      StatusBar.setHidden(false, "none");
+      StatusBar.setHidden(false, "fade");
       StatusBar.setBarStyle("light-content", true);
     }, 3000);
     return () => clearInterval(interval);
