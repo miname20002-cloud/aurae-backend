@@ -945,23 +945,37 @@ export default function ChatScreen() {
             pointerEvents="none"
           />
           <View
-            style={[
-              styles.coachBubble,
+          style={[
+            styles.coachBubble,
+            coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+              ? { top: Math.max(70, coachTarget.y - 140) }
+              : { top: coachTarget.y + coachTarget.height + 24 },
+          ]}
+          pointerEvents="none"
+        >
+          <View
+            style={
               coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-                ? { top: Math.max(70, coachTarget.y - 140) }
-                : { top: coachTarget.y + coachTarget.height + 24 },
+                ? styles.coachTailDownOuter
+                : styles.coachTailUpOuter
+            }
+          />
+          <View
+            style={
+              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+                ? styles.coachTailDownInner
+                : styles.coachTailUpInner
+            }
+          />
+          <Text
+            style={[
+              styles.coachBubbleText,
+              fontsLoaded && { fontFamily: "Fredoka_700Bold" },
             ]}
-            pointerEvents="none"
           >
-            <Text
-              style={[
-                styles.coachBubbleText,
-                fontsLoaded && { fontFamily: "Fredoka_700Bold" },
-              ]}
-            >
-              {coachSteps[coachStep - 1].text}
-            </Text>
-            <View style={styles.coachDots}>
+            {coachSteps[coachStep - 1].text}
+          </Text>
+          <View style={styles.coachDots}>
               {coachSteps.map((step, i) => (
                 <View
                   key={i}
@@ -1413,18 +1427,78 @@ const styles = StyleSheet.create({
     left: 24,
     right: 24,
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    borderWidth: 3,
-    borderColor: "#1A1014",
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    borderWidth: 5,
+    borderColor: "#8B7CF6",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 28,
+    paddingVertical: 20,
+    paddingHorizontal: 22,
   },
+  coachTailDownOuter: {
+    position: "absolute",
+    bottom: -17,
+    left: "50%",
+    marginLeft: -16,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 16,
+    borderRightWidth: 16,
+    borderTopWidth: 17,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#8B7CF6",
+  },
+  coachTailDownInner: {
+    position: "absolute",
+    bottom: -17,
+    left: "50%",
+    marginLeft: -11,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 11,
+    borderRightWidth: 11,
+    borderTopWidth: 12,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#FFFFFF",
+  },
+  coachTailUpOuter: {
+    position: "absolute",
+    top: -17,
+    left: "50%",
+    marginLeft: -16,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 16,
+    borderRightWidth: 16,
+    borderBottomWidth: 17,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#8B7CF6",
+  },
+  coachTailUpInner: {
+    position: "absolute",
+    top: -17,
+    left: "50%",
+    marginLeft: -11,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 11,
+    borderRightWidth: 11,
+    borderBottomWidth: 12,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#FFFFFF",
+    },
   coachBubbleText: {
-    color: "#1A1014",
-    fontSize: 15,
+    color: "#241B33",
+    fontSize: 16,
     fontWeight: "800",
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 24,
+    letterSpacing: 0.2,
   },
   coachDots: {
     flexDirection: "row",
