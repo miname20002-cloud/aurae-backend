@@ -93,9 +93,6 @@ function emotionClipPath(companionId: string, emotion: string): string {
 }
 
 function introClipPath(companionId: string): string {
-  // Matches the backend's chat_greeting() path formula exactly. Computed
-  // locally so the intro video can start the instant the user enters,
-  // without waiting on the greeting API response first.
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
   return `assets/${cap}_Assets/${cap}_intro.mp4`;
 }
@@ -140,7 +137,6 @@ function complementaryColor(hex: string): string {
     h /= 6;
   }
 
-  // rotate hue 180 degrees for the complementary color
   h = (h + 0.5) % 1;
 
   function hue2rgb(p: number, q: number, t: number) {
@@ -227,8 +223,6 @@ function Sparkle({
   );
 }
 
-// 💗/🔥 헤더 게이지바 - 뱃지 아이콘 + 칸(segment) 단위로 채워지는 트랙.
-// 마지막으로 채워진 칸에만 글로우를 줘서 "거의 다 찼다"는 임박감을 만든다.
 function Gauge({
   icon,
   color,
@@ -304,7 +298,6 @@ export default function ChatScreen() {
   const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
 
-  // --- reward sprint 1 state ---
   const [currentStreak, setCurrentStreak] = useState(0);
   const [themes, setThemes] = useState<ThemeInfo[]>([]);
   const [activeThemeId, setActiveThemeId] = useState("default");
@@ -313,26 +306,22 @@ export default function ChatScreen() {
   const [bonusToast, setBonusToast] = useState<BonusInfo | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // --- theme unlock discoverability (badge + pulse + haptic + toast) ---
   const [seenThemeStreak, setSeenThemeStreak] = useState(0);
   const [unseenThemeCount, setUnseenThemeCount] = useState(0);
   const [milestoneToast, setMilestoneToast] = useState<{ streakDay: number; themeName: string | null } | null>(null);
   const milestoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paletteScale = useSharedValue(1);
 
-  // --- relationship level (badge + level-up toast) ---
   const [relationshipLevel, setRelationshipLevel] = useState(1);
   const [relationshipLevelName, setRelationshipLevelName] = useState("Just Met");
   const [relationshipProgressPct, setRelationshipProgressPct] = useState(0);
   const [levelUpToast, setLevelUpToast] = useState<{ newLevel: number; levelName: string } | null>(null);
   const levelUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // --- streak gauge fill (segment count = next_milestone - prev_milestone) ---
   const [streakPrevMilestone, setStreakPrevMilestone] = useState(0);
   const [streakNextMilestone, setStreakNextMilestone] = useState<number | null>(3);
 
-  // --- first-visit coach marks (cartoon callouts, shown once) ---
-  const [coachStep, setCoachStep] = useState(0); // 0 = inactive, 1-3 = active step
+  const [coachStep, setCoachStep] = useState(0);
   const [coachTarget, setCoachTarget] = useState<{ x: number; y: number; width: number; height: number } | null>(
     null
   );
@@ -345,8 +334,6 @@ export default function ChatScreen() {
   const [fontsLoaded] = useFonts({ Fredoka_600SemiBold, Fredoka_700Bold });
 
   function measureCoachTarget(ref: RefObject<View | null>) {
-    // measureInWindow needs the target to have actually painted - retry once
-    // on the next frame if it comes back empty (e.g. right after a layout change).
     ref.current?.measureInWindow((x, y, width, height) => {
       if (width === 0 && height === 0) {
         requestAnimationFrame(() => {
@@ -366,9 +353,6 @@ export default function ChatScreen() {
     else if (coachStep === 5) measureCoachTarget(firstBubbleRef);
   }, [coachStep]);
 
-  // 안전장치: 타겟 ref가 아직 화면에 안 올라와서(예: 메시지 리스트가 막 그려지는
-  // 타이밍) 측정이 끝까지 실패하면, 그 단계에서 멈춰버리지 않게 자동으로
-  // 다음 단계로 넘어간다.
   useEffect(() => {
     if (coachStep === 0) return;
     const timer = setTimeout(() => {
@@ -401,8 +385,6 @@ export default function ChatScreen() {
     }
   }
 
-  // 설정 모달의 "Replay Tips"용 - 최초 1회 체크(AsyncStorage)는 건너뛰고
-  // 언제든 다시 볼 수 있게 한다.
   function replayCoachMarks() {
     setShowSettingsModal(false);
     setCoachStep(1);
@@ -413,9 +395,6 @@ export default function ChatScreen() {
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
   const userGlowColor = complementaryColor(companion?.accent ?? "#7C8CFF");
 
-  // 가입 직후 첫 입장 코치마크 - 카툰 말풍선으로 핵심 기능 4개를 순서대로 짚어준다.
-  // 각 단계의 하이라이트 색을 그 기능이 실제로 쓰는 색과 맞춰서 "이 색=이 기능"
-  // 감각적 연결이 생기게 한다. 1회만 자동 노출, AsyncStorage 플래그로 기억한다.
   const coachSteps = [
     { text: "tap me anytime to replay my intro 🎬", color: companion?.accent ?? "#8B7CF6" },
     { text: "💗 relationship & 🔥 streak — keep these glowing every day", color: "#FF8FAB" },
@@ -436,7 +415,6 @@ export default function ChatScreen() {
     opacity: breath.value,
   }));
 
-  // --- intro video entrance/exit flourish (flash burst + sparkle burst) ---
   const introFlashOpacity = useSharedValue(0);
   const introFlashScale = useSharedValue(0.4);
   const sparkleProgress = useSharedValue(0);
@@ -477,17 +455,17 @@ export default function ChatScreen() {
     transform: [{ scale: paletteScale.value }],
   }));
 
-useEffect(() => {
-  if (showIntroOverlay || showFullscreenClip) {
-    StatusBar.setHidden(true, "none"); // 인트로/풀스크린 영상 중엔 상태바 완전히 숨김
-    return;
-  }
-  const interval = setInterval(() => {
-    StatusBar.setHidden(false, "none");
-    StatusBar.setBarStyle("light-content", true);
-  }, 3000);
-  return () => clearInterval(interval);
-}, [showIntroOverlay, showFullscreenClip]);
+  useEffect(() => {
+    if (showIntroOverlay || showFullscreenClip) {
+      StatusBar.setHidden(true, "none");
+      return;
+    }
+    const interval = setInterval(() => {
+      StatusBar.setHidden(false, "none");
+      StatusBar.setBarStyle("light-content", true);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [showIntroOverlay, showFullscreenClip]);
 
   useEffect(() => {
     (async () => {
@@ -498,13 +476,6 @@ useEffect(() => {
     })();
   }, []);
 
-  // 푸시 알림 토큰 발급/서버 등록.
-  // ⚠️ 권한 요청(다이얼로그를 띄우는 requestPermissionsAsync)은 여기서 더 이상
-  // 하지 않는다 - 그건 onboarding 첫 페이지(app/onboarding/name.tsx, "Next"
-  // 누르는 시점)에서 이미 끝내놨다. 이 화면(인트로 영상이 막 시작되는 시점)
-  // 에서 권한 다이얼로그를 또 띄우면, 다이얼로그가 인트로 영상 위에 끼어들고
-  // 그 뒤에 채팅 헤더가 그대로 노출된 채로 떠 있는 문제가 생긴다.
-  // 여기서는 "이미 허용됐는지"만 조용히 확인해서 토큰만 등록한다.
   useEffect(() => {
     (async () => {
       try {
@@ -519,9 +490,6 @@ useEffect(() => {
     })();
   }, []);
 
-  // 보상형 광고(한도 도달시 +3개) - 광고는 미리 로드해둬야 버튼 누른
-  // 즉시 뜬다. 보너스 지급은 반드시 EARNED_REWARD 콜백 안에서만 호출해서,
-  // 광고를 끝까지 안 보고 중간에 닫으면 보너스가 안 나가게 한다.
   useEffect(() => {
     const ad = rewardedAdRef.current;
 
@@ -540,7 +508,7 @@ useEffect(() => {
     const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
       setWatchingAd(false);
       setAdReady(false);
-      ad.load(); // 다음 시청을 위해 바로 다시 로드해둔다
+      ad.load();
     });
     const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
       setWatchingAd(false);
@@ -658,11 +626,6 @@ useEffect(() => {
     p.loop = false;
   });
 
-  // 캐시를 안 지우고 재접속했을 때, 직전 세션에서 떠돌던(orphaned) 인트로/
-  // 풀스크린 플레이어가 화면엔 안 보이면서 소리만 새는 경우가 있다.
-  // opacity(화면 표시)와 audio(재생)는 완전히 분리된 시스템이라, 화면에
-  // 안 보인다고 소리도 안 나는 게 보장되지 않는다 - 마운트 시점에 무조건
-  // 한 번 멈춰서 방어한다.
   useEffect(() => {
     introPlayer.pause();
     fullscreenPlayer.pause();
@@ -683,9 +646,6 @@ useEffect(() => {
     playerB.pause();
   }, [companion]);
 
-  // 캐릭터 프레임 터치로 띄운 풀스크린 인트로 영상이 끝까지 재생되면
-  // 자동으로 닫혀서 채팅방으로 자연스럽게 복귀한다. 중간에 터치하면
-  // 기존 onPress(스킵)가 그대로 동작한다.
   useEffect(() => {
     const subscription = fullscreenPlayer.addListener("playToEnd", () => {
       setShowFullscreenClip(false);
@@ -723,17 +683,8 @@ useEffect(() => {
           }
           setInitializing(false);
         } else if (!greetingTried.current) {
-          // 진짜 첫 만남 - 캐릭터가 먼저 인사하게.
-          // 인사 API 응답을 기다리는 동안 평소 채팅화면이 잠깐 보였다가
-          // 오버레이로 덮이면 어색하니, 첫 만남이라는 걸 아는 즉시(API 응답
-          // 전부터) 오버레이를 먼저 띄워서 평소 화면이 한 프레임도 안
-          // 보이게 한다.
           greetingTried.current = true;
 
-          // 온보딩을 건너뛴 기존 유저(device_id 매칭)는 name.tsx의 권한 요청을
-          // 거치지 않았을 수 있다. 인트로 영상이 시작되기 전에 여기서 조용히
-          // 확인해서, 다이얼로그가 인트로 위에 끼어드는 걸 방지한다.
-          // "undetermined"일 때만 물어보고, 거부 상태면 조용히 넘어간다.
           try {
             const { status: permStatus } = await Notifications.getPermissionsAsync();
             if (permStatus === "undetermined") {
@@ -746,10 +697,6 @@ useEffect(() => {
           setShowIntroOverlay(true);
           introOverlayOpacity.value = 1;
 
-          // 인사 영상(Chloe_intro.mp4 등)의 경로는 캐릭터만 알면 바로 계산
-          // 가능하니, 인사 API 응답을 기다리지 않고 암전 직후 곧바로 재생
-          // 시작한다 - API 호출(LLM 응답 생성)은 영상이 도는 동안 백그라운드
-          // 에서 병렬로 처리한다.
           if (companion) {
             introPlayer.replace(assetUrl(introClipPath(companion.id)));
             introPlayer.play();
@@ -757,7 +704,7 @@ useEffect(() => {
           }
 
           const greetingPromise = getGreeting();
-          greetingPromise.catch(() => {}); // 콘솔의 unhandled rejection 경고 방지용 - 실제 에러 처리는 아래 setTimeout 안에서 한다
+          greetingPromise.catch(() => {});
 
           setTimeout(async () => {
             try {
@@ -768,8 +715,6 @@ useEffect(() => {
                 setRelationshipProgressPct(greeting.relationship_progress_pct);
               }
 
-              // 진동으로만 "끝났다"는 신호를 주고, 시각 효과(스파클)는
-              // 안 보인다는 피드백을 받아서 제거함.
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               setTimeout(() => {
                 introOverlayOpacity.value = withTiming(0, {
@@ -779,9 +724,6 @@ useEffect(() => {
                 nextId.current += 1;
                 setMessages([{ id: String(nextId.current), role: "assistant", text: greeting.reply }]);
                 setTimeout(() => {
-                  // 영상이 끝나도 플레이어가 "재생 중" 상태로 남아있으면,
-                  // 화면 캡처 제스처처럼 화면이 잠깐 다시 그려지는 순간에
-                  // 음성만 다시 살아날 수 있다 - 명시적으로 멈춰서 막는다.
                   introPlayer.pause();
                   setShowIntroOverlay(false);
                   setInitializing(false);
@@ -789,8 +731,6 @@ useEffect(() => {
                 }, INTRO_FADE_OUT_MS);
               }, SPARKLE_LINGER_MS);
             } catch {
-              // 인사 실패해도 빈 화면으로 시작 (치명적이지 않음) - 오버레이를
-              // 띄워둔 채로 멈춰있으면 안 되니 반드시 내려준다.
               introPlayer.pause();
               introOverlayOpacity.value = 0;
               setShowIntroOverlay(false);
@@ -802,7 +742,6 @@ useEffect(() => {
           setInitializing(false);
         }
       } catch {
-        // 기록 불러오기 실패해도 빈 화면으로 시작
         setInitializing(false);
       }
     })();
@@ -843,9 +782,6 @@ useEffect(() => {
     return () => clearTimeout(timeout);
   }, [messages]);
 
-  // 캐릭터가 먼저 보낸 메시지(선제문자)는 도착했을 때만 강조 풍선으로
-  // 보이고, 화면에서 몇 초간 보이면 일반 풍선으로 자동 원복된다 - "안 읽은
-  // 동안만 다르게 보인다"는 카톡식 동작을 화면 표시 자체로 대체한 것.
   useEffect(() => {
     if (!messages.some((m) => m.isProactive)) return;
     const timeout = setTimeout(() => {
@@ -933,10 +869,6 @@ useEffect(() => {
     setError(null);
     setWatchingAd(true);
     rewardedAdRef.current.show();
-    // setWatchingAd(false)와 다음 광고 재로드는 위쪽 CLOSED 리스너가 처리한다.
-    // 보너스 지급(watchAdBonus 호출)은 EARNED_REWARD 리스너가 처리한다 -
-    // 광고를 끝까지 안 보고 닫으면 CLOSED만 뜨고 EARNED_REWARD는 안 떠서
-    // 보너스가 안 나간다.
   }
 
   const currentEmotion = reactionPath ? emotionFromPath(reactionPath) : IDLE_EMOTIONS[idleIdx];
@@ -1105,10 +1037,6 @@ useEffect(() => {
                 ref={avatarWrapRef}
                 onPress={() => {
                   if (!companion) return;
-                  // 캐릭터 프레임 터치 → 풀스크린 인트로 영상 재생.
-                  // 영상이 끝까지 재생되면 위쪽 playToEnd 리스너가 자동으로
-                  // 닫아서 채팅방으로 자연스럽게 복귀한다. 중간에 터치하면
-                  // 스킵된다 (위 onPress).
                   fullscreenPlayer.replace(assetUrl(introClipPath(companion.id)));
                   fullscreenPlayer.play();
                   setShowFullscreenClip(true);
@@ -1187,16 +1115,6 @@ useEffect(() => {
                   label={`${currentStreak}`}
                 />
               </View>
-              <Pressable onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInline}>
-                <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
-                  <Text style={styles.settingsButtonText}>⚙️</Text>
-                </Animated.View>
-                {unseenThemeCount > 0 && (
-                  <View style={styles.themeBadgeDot}>
-                    <Text style={styles.themeBadgeText}>{unseenThemeCount}</Text>
-                  </View>
-                )}
-              </Pressable>
             </View>
           </View>
 
@@ -1301,6 +1219,16 @@ useEffect(() => {
         )}
 
         <View style={styles.inputRow} ref={inputRowRef}>
+          <Pressable onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInputRow}>
+            <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
+              <Text style={styles.settingsButtonText}>⚙️</Text>
+            </Animated.View>
+            {unseenThemeCount > 0 && (
+              <View style={styles.themeBadgeDot}>
+                <Text style={styles.themeBadgeText}>{unseenThemeCount}</Text>
+              </View>
+            )}
+          </Pressable>
           <TextInput
             value={input}
             onChangeText={setInput}
@@ -1422,7 +1350,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 199,
-    elevation: 199,  // Android는 elevation으로 z-order를 결정 — 없으면 헤더가 위에 그려짐
+    elevation: 199,
     backgroundColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
@@ -1703,6 +1631,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   settingsButtonInline: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    position: "relative",
+  },
+  settingsButtonInputRow: {
     paddingHorizontal: 4,
     paddingVertical: 2,
     position: "relative",
