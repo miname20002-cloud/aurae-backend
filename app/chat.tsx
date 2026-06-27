@@ -457,17 +457,17 @@ export default function ChatScreen() {
   }));
 
   useEffect(() => {
-    if (showIntroOverlay || showFullscreenClip) {
-      StatusBar.setHidden(true, "fade");
-      NavigationBar.setVisibilityAsync('hidden');
-      return;
-    }
-    const interval = setInterval(() => {
-      StatusBar.setHidden(false, "fade");
-      StatusBar.setBarStyle("light-content", true);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [showIntroOverlay, showFullscreenClip]);
+  if (showIntroOverlay || showFullscreenClip) {
+    StatusBar.setHidden(true, "fade");
+    NavigationBar.setVisibilityAsync('hidden');
+  } else {
+    StatusBar.setHidden(false, "fade");
+    StatusBar.setBarStyle("light-content", true);
+    StatusBar.setBackgroundColor(bgColor, true);
+    NavigationBar.setVisibilityAsync('visible');
+    NavigationBar.setBackgroundColorAsync(bgColor);
+  }
+}, [showIntroOverlay, showFullscreenClip, bgColor]);
 
   useEffect(() => {
     (async () => {
