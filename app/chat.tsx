@@ -15,6 +15,7 @@ import {
   Modal,
   Image,
   Dimensions,
+  Keyboard,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
@@ -477,6 +478,23 @@ export default function ChatScreen() {
       NavigationBar.setBackgroundColorAsync(bgColor);
     }
   }, [showIntroOverlay, showFullscreenClip, bgColor]);
+
+  useEffect(() => {
+  const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+    if (!showIntroOverlay && !showFullscreenClip) {
+      NavigationBar.setBackgroundColorAsync(bgColor);
+    }
+  });
+  const showSub = Keyboard.addListener("keyboardDidShow", () => {
+    if (!showIntroOverlay && !showFullscreenClip) {
+      NavigationBar.setBackgroundColorAsync(bgColor);
+    }
+  });
+  return () => {
+    hideSub.remove();
+    showSub.remove();
+  };
+}, [bgColor, showIntroOverlay, showFullscreenClip]);
 
   useEffect(() => {
     (async () => {
@@ -964,9 +982,9 @@ export default function ChatScreen() {
           >
             {bubbleContentSize.width > 0 && (
               <Svg
-                width={bubbleContentSize.width + 24}
-                height={bubbleContentSize.height + 24}
-                viewBox={`0 0 ${bubbleContentSize.width + 24} ${bubbleContentSize.height + 24}`}
+                width={bubbleContentSize.width + 24 + 56}
+                height={bubbleContentSize.height + 24 + 56}
+                viewBox={`-28 -28 ${bubbleContentSize.width + 24 + 56} ${bubbleContentSize.height + 24 + 56}`}
                 style={styles.coachBubbleSvg}
               >
                 <Path
@@ -1452,8 +1470,8 @@ const styles = StyleSheet.create({
   },
   coachBubbleSvg: {
     position: "absolute",
-    top: -12,
-    left: -12,
+    top: -40,
+    left: -40,
   },
   coachBubbleContent: {
     paddingVertical: 20,
