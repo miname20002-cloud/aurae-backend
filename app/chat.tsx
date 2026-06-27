@@ -55,6 +55,7 @@ import {
 } from "@/lib/api";
 import { companionByName } from "@/lib/companions";
 import { getSession } from "@/lib/session";
+import * as NavigationBar from 'expo-navigation-bar';
 
 type Message = {
   id: string;
@@ -458,6 +459,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (showIntroOverlay || showFullscreenClip) {
       StatusBar.setHidden(true, "none");
+      NavigationBar.setVisibilityAsync('hidden');
       return;
     }
     const interval = setInterval(() => {
