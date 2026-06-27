@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type RefObject } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   View,
   Text,
@@ -268,12 +269,46 @@ function Gauge({
   );
 }
 
-function coachBubbleTailDownPath(w: number, h: number): string {
-  return `M${w * 0.06},${h * 0.34} Q${w * 0.0},${h * 0.18} ${w * 0.16},${h * 0.08} Q${w * 0.3},${h * -0.02} ${w * 0.46},${h * 0.05} Q${w * 0.6},${h * -0.03} ${w * 0.74},${h * 0.06} Q${w * 0.9},${h * 0.0} ${w * 0.96},${h * 0.16} Q${w * 1.02},${h * 0.32} ${w * 0.94},${h * 0.46} Q${w * 1.0},${h * 0.6} ${w * 0.92},${h * 0.72} Q${w * 0.98},${h * 0.84} ${w * 0.8},${h * 0.88} L${w * 0.58},${h * 0.9} L${w * 0.5},${h * 1.06} L${w * 0.42},${h * 0.9} L${w * 0.2},${h * 0.9} Q${w * 0.04},${h * 0.86} ${w * 0.02},${h * 0.7} Q${w * -0.04},${h * 0.55} ${w * 0.02},${h * 0.42} Q${w * -0.02},${h * 0.36} ${w * 0.06},${h * 0.34} Z`;
+function coachBubbleBodyPath(w: number, h: number): string {
+  const spikes = 14; // 둘레를 따라 도는 뾰족 칼날 개수
+  const spikeDepth = 8; // 칼날이 바깥으로 튀어나오는 깊이
+  const valleyDepth = 3; // 칼날 사이가 안으로 들어가는 깊이
+  const sideLengths = [w, h, w, h];
+  const perimeter = 2 * (w + h);
+
+  function basePoint(dist: number) {
+    let d = dist;
+    if (d < sideLengths[0]) return { x: d, y: 0, nx: 0, ny: -1 };
+    d -= sideLengths[0];
+    if (d < sideLengths[1]) return { x: w, y: d, nx: 1, ny: 0 };
+    d -= sideLengths[1];
+    if (d < sideLengths[2]) return { x: w - d, y: h, nx: 0, ny: 1 };
+    d -= sideLengths[2];
+    return { x: 0, y: h - d, nx: -1, ny: 0 };
+  }
+
+  const totalPoints = spikes * 2;
+  let d = "";
+  for (let i = 0; i < totalPoints; i++) {
+    const dist = (i / totalPoints) * perimeter;
+    const p = basePoint(dist);
+    const isPeak = i % 2 === 0;
+    const offset = isPeak ? spikeDepth : -valleyDepth;
+    const x = p.x + p.nx * offset;
+    const y = p.y + p.ny * offset;
+    d += i === 0 ? `M${x},${y}` : ` L${x},${y}`;
+  }
+  return d + " Z";
 }
 
-function coachBubbleTailUpPath(w: number, h: number): string {
-  return `M${w * 0.06},${h * 0.66} Q${w * 0.0},${h * 0.82} ${w * 0.16},${h * 0.92} Q${w * 0.3},${h * 1.02} ${w * 0.46},${h * 0.95} Q${w * 0.6},${h * 1.03} ${w * 0.74},${h * 0.94} Q${w * 0.9},${h * 1.0} ${w * 0.96},${h * 0.84} Q${w * 1.02},${h * 0.68} ${w * 0.94},${h * 0.54} Q${w * 1.0},${h * 0.4} ${w * 0.92},${h * 0.28} Q${w * 0.98},${h * 0.16} ${w * 0.8},${h * 0.12} L${w * 0.58},${h * 0.1} L${w * 0.5},${h * -0.06} L${w * 0.42},${h * 0.1} L${w * 0.2},${h * 0.1} Q${w * 0.04},${h * 0.14} ${w * 0.02},${h * 0.3} Q${w * -0.04},${h * 0.45} ${w * 0.02},${h * 0.58} Q${w * -0.02},${h * 0.64} ${w * 0.06},${h * 0.66} Z`;
+function coachBubbleTailShapePath(w: number, h: number, side: "top" | "bottom"): string {
+  const tailWidth = Math.min(w * 0.16, 36);
+  const tailLength = 22;
+  const cx = w / 2;
+  if (side === "bottom") {
+    return `M${cx - tailWidth / 2},${h - 14} L${cx},${h + tailLength} L${cx + tailWidth / 2},${h - 14} Z`;
+  }
+  return `M${cx - tailWidth / 2},14 L${cx},${-tailLength} L${cx + tailWidth / 2},14 Z`;
 }
 
 export default function ChatScreen() {
@@ -340,28 +375,39 @@ export default function ChatScreen() {
   const gaugeStackRef = useRef<View>(null);
   const inputRowRef = useRef<View>(null);
   const userAvatarRef = useRef<View>(null);
+  const settingsButtonRef = useRef<View>(null);
   const firstBubbleRef = useRef<View>(null);
+  
 
   const [fontsLoaded] = useFonts({ Fredoka_600SemiBold, Fredoka_700Bold });
-
+  const insets = useSafeAreaInsets();
   function measureCoachTarget(ref: RefObject<View | null>) {
-    ref.current?.measureInWindow((x, y, width, height) => {
-      if (width === 0 && height === 0) {
-        requestAnimationFrame(() => {
-          ref.current?.measureInWindow((x2, y2, w2, h2) => setCoachTarget({ x: x2, y: y2, width: w2, height: h2 }));
-        });
-      } else {
-        setCoachTarget({ x, y, width, height });
-      }
-    });
+    const doMeasure = (isRetry: boolean) => {
+      ref.current?.measureInWindow((x, y, width, height) => {
+        if (width === 0 && height === 0) {
+          requestAnimationFrame(() => doMeasure(isRetry));
+        } else {
+          setCoachTarget({ x, y, width, height });
+          // 상태바/네비바 전환이 끝나기 전에 측정될 수 있어서, 살짝 늦게
+          // 한 번 더 재측정해서 어긋난 위치를 자동으로 보정한다.
+          if (!isRetry) {
+            setTimeout(() => doMeasure(true), 280);
+          }
+        }
+      });
+    };
+    doMeasure(false);
   }
 
-  useEffect(() => {
+    useEffect(() => {
     if (coachStep === 1) measureCoachTarget(avatarWrapRef);
     else if (coachStep === 2) measureCoachTarget(gaugeStackRef);
     else if (coachStep === 3) measureCoachTarget(inputRowRef);
     else if (coachStep === 4) measureCoachTarget(userAvatarRef);
-    else if (coachStep === 5) measureCoachTarget(firstBubbleRef);
+    else if (coachStep === 5) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      setTimeout(() => measureCoachTarget(firstBubbleRef), 350);
+    } else if (coachStep === 6) measureCoachTarget(settingsButtonRef);
   }, [coachStep]);
 
   useEffect(() => {
@@ -412,7 +458,9 @@ export default function ChatScreen() {
     { text: "say anything, I'm listening 👂", color: colors.accent },
     { text: "add your photo so it feels more like you 📸", color: userGlowColor },
     { text: "long press any message to share it 📤", color: "#39E6FF" },
+    { text: "I'm all set up! tap here for settings anytime ⚙️", color: "#FFB84D" },
   ];
+  
 
   const breath = useSharedValue(0.4);
   useEffect(() => {
@@ -906,7 +954,7 @@ export default function ChatScreen() {
   const glowColor = `rgb(${glowRgb})`;
 
   return (
-    <Screen style={{ ...styles.container, backgroundColor: bgColor }}>
+    <Screen style={{ ...styles.container, backgroundColor: bgColor, paddingBottom: 0 }}>
       {showIntroOverlay && (
         <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
           <VideoView
@@ -953,91 +1001,116 @@ export default function ChatScreen() {
       )}
 
       {coachStep > 0 && coachTarget && (
-        <View style={styles.coachOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
-          <View
-            style={[
-              styles.coachHighlight,
-              {
-                left: coachTarget.x - 6,
-                top: coachTarget.y - 6,
-                width: coachTarget.width + 12,
-                height: coachTarget.height + 12,
-                borderRadius:
-                  coachStep === 1 || coachStep === 4 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
-                borderColor: coachSteps[coachStep - 1].color,
-                shadowColor: coachSteps[coachStep - 1].color,
-              },
-            ]}
-            pointerEvents="none"
+  <View style={styles.coachOverlay}>
+    <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
+
+    {/* Highlight */}
+    <View
+      style={[
+        styles.coachHighlight,
+        {
+          left: coachTarget.x - 8,
+          top: coachTarget.y - 8,
+          width: coachTarget.width + 16,
+          height: coachTarget.height + 16,
+          borderRadius:
+            coachStep === 1 || coachStep === 4
+              ? (Math.max(coachTarget.width, coachTarget.height) + 16) / 2
+              : 18,
+          borderColor: coachSteps[coachStep - 1].color,
+          shadowColor: coachSteps[coachStep - 1].color,
+        },
+      ]}
+      pointerEvents="none"
+    />
+
+    {/* 카툰 말풍선 */}
+    <View
+      style={[
+        styles.coachBubble,
+        coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
+          ? { top: Math.max(60, coachTarget.y - 160) }
+          : { top: coachTarget.y + coachTarget.height + 28 },
+      ]}
+      pointerEvents="none"
+    >
+      {bubbleContentSize.width > 0 && (
+        <Svg
+          width={bubbleContentSize.width + 52}
+          height={bubbleContentSize.height + 72}
+          viewBox={`0 0 ${bubbleContentSize.width + 52} ${bubbleContentSize.height + 72}`}
+          style={styles.coachBubbleSvg}
+        >
+          {/* 본체 - 찢어진 카툰 스타일 */}
+          <Path
+            d={coachBubbleBodyPath(bubbleContentSize.width + 32, bubbleContentSize.height + 32)}
+            fill="#C084FC"
+            stroke="#4C1D95"
+            strokeWidth={7}
+            strokeLinejoin="round"
           />
-          <View
-            style={[
-              styles.coachBubble,
-              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-                ? { top: Math.max(70, coachTarget.y - 140) }
-                : { top: coachTarget.y + coachTarget.height + 24 },
-            ]}
-            pointerEvents="none"
-          >
-            {bubbleContentSize.width > 0 && (
-              <Svg
-                width={bubbleContentSize.width + 24 + 56}
-                height={bubbleContentSize.height + 24 + 56}
-                viewBox={`-28 -28 ${bubbleContentSize.width + 24 + 56} ${bubbleContentSize.height + 24 + 56}`}
-                style={styles.coachBubbleSvg}
-              >
-                <Path
-                  d={
-                    coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-                      ? coachBubbleTailDownPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)
-                      : coachBubbleTailUpPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)
-                  }
-                  fill="#FFFFFF"
-                  stroke="#8B7CF6"
-                  strokeWidth={5}
-                  strokeLinejoin="round"
-                />
-              </Svg>
+
+          {/* 꼬리 */}
+          <Path
+            d={coachBubbleTailShapePath(
+              bubbleContentSize.width + 32,
+              bubbleContentSize.height + 32,
+              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "top" : "bottom"
             )}
-            <View
-              onLayout={(e) => {
-                const { width, height } = e.nativeEvent.layout;
-                if (Math.abs(width - bubbleContentSize.width) > 1 || Math.abs(height - bubbleContentSize.height) > 1) {
-                  setBubbleContentSize({ width, height });
-                }
-              }}
-              style={styles.coachBubbleContent}
-            >
-              <Text
-                style={[styles.coachBubbleText, fontsLoaded && { fontFamily: "Fredoka_700Bold" }]}
-              >
-                {coachSteps[coachStep - 1].text}
-              </Text>
-              <View style={styles.coachDots}>
-                {coachSteps.map((step, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.coachDot,
-                      i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-          </View>
-          <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
-            <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>skip</Text>
-          </Pressable>
-          <Text
-            style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}
-            pointerEvents="none"
-          >
-            tap anywhere to continue
-          </Text>
-        </View>
+            fill="#C084FC"
+            stroke="#4C1D95"
+            strokeWidth={7}
+          />
+        </Svg>
       )}
+
+      <View
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          if (Math.abs(width - bubbleContentSize.width) > 2 || Math.abs(height - bubbleContentSize.height) > 2) {
+            setBubbleContentSize({ width, height });
+          }
+        }}
+        style={styles.coachBubbleContent}
+      >
+        <Text
+          style={[
+            styles.coachBubbleText,
+            fontsLoaded && { fontFamily: "Fredoka_700Bold" },
+          ]}
+        >
+          {coachSteps[coachStep - 1].text}
+        </Text>
+
+        <View style={styles.coachDots}>
+          {coachSteps.map((step, i) => (
+            <View
+              key={i}
+              style={[
+                styles.coachDot,
+                i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+
+    {/* Skip 버튼 - 기존 그대로 */}
+    <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
+      <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>
+        skip
+      </Text>
+    </Pressable>
+
+    <Text
+      style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}
+      pointerEvents="none"
+    >
+      tap anywhere to continue
+    </Text>
+  </View>
+)}
 
       <KeyboardAvoidingView
         style={styles.flexFill}
@@ -1274,8 +1347,8 @@ export default function ChatScreen() {
           </Pressable>
         )}
 
-        <View style={styles.inputRow} ref={inputRowRef}>
-          <Pressable onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInputRow}>
+        <View style={[styles.inputRow, { paddingBottom: Math.max(spacing.sm, insets.bottom) }]} ref={inputRowRef}>
+          <Pressable ref={settingsButtonRef} onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInputRow}>
             <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
               <Text style={styles.settingsButtonText}>⚙️</Text>
             </Animated.View>
