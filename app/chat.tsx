@@ -477,13 +477,17 @@ export default function ChatScreen() {
     transform: [{ scale: paletteScale.value }],
   }));
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      StatusBar.setHidden(false, "none");
-      StatusBar.setBarStyle("light-content", true); 
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+useEffect(() => {
+  if (showIntroOverlay || showFullscreenClip) {
+    StatusBar.setHidden(true, "none"); // 인트로/풀스크린 영상 중엔 상태바 완전히 숨김
+    return;
+  }
+  const interval = setInterval(() => {
+    StatusBar.setHidden(false, "none");
+    StatusBar.setBarStyle("light-content", true);
+  }, 3000);
+  return () => clearInterval(interval);
+}, [showIntroOverlay, showFullscreenClip]);
 
   useEffect(() => {
     (async () => {
