@@ -14,10 +14,12 @@
     },
     "android": {
       "package": "com.aurae.app",
+      "softwareKeyboardLayoutMode": "resize",
       "backgroundColor": "#0B0B12",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#0B0B12"
+        
       }
     },
     "androidNavigationBar": {

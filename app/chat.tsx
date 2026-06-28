@@ -15,6 +15,7 @@ import {
   Modal,
   Image,
   Dimensions,
+  Keyboard,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
@@ -68,11 +69,13 @@ const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
 const IDLE_SWITCH_MS = 7500;
 const REACTION_HOLD_MS = 7500;
 const TOAST_HOLD_MS = 4000;
+
 const MILESTONE_TOAST_HOLD_MS = 5000;
 const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
 const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
+
 // ⚠️ 항상 테스트 광고단위로 고정해둔다. __DEV__로 분기하면 EAS preview
 // 빌드(지금 테스트 중인 그 빌드)에서는 false가 돼서 진짜 광고단위가
 // 활성화되는데, 본인이 직접 눌러서 테스트하면 AdMob 자기클릭(self-click)
@@ -84,15 +87,20 @@ const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
 // 항상 테스트광고만 받게 하는 방법을 추천한다.
 const AD_BONUS_UNIT_ID = TestIds.REWARDED; // TODO: 정식 출시 직전에만 "ca-app-pub-9861327921813724/2624188129"로 교체
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
-const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
-const INTRO_FADE_OUT_MS = 600; // smooth fade duration as the intro overlay dissolves into the revealed chat UI
+const SPARKLE_LINGER_MS = 400;
+
+// how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
+const INTRO_FADE_OUT_MS = 600;
+// smooth fade duration as the intro overlay dissolves into the revealed chat UI
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
   return `assets/${cap}_Assets/${cap}_${emotion}.mp4`;
 }
 
+// source: 62-63
 function introClipPath(companionId: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
   return `assets/${cap}_Assets/${cap}_intro.mp4`;
@@ -122,7 +130,6 @@ function complementaryColor(hex: string): string {
   const r = parseInt(sanitized.substring(0, 2), 16) / 255;
   const g = parseInt(sanitized.substring(2, 4), 16) / 255;
   const b = parseInt(sanitized.substring(4, 6), 16) / 255;
-
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   let h = 0;
@@ -174,7 +181,6 @@ const EMOTION_GLOW_RGB: Record<string, string> = {
   wink: "255, 143, 203",
   question: "140, 217, 255",
 };
-
 const SPARKLE_COLORS = ["#FFD76B", "#FF8FAB", "#8CD9FF", "#FFE9B0"];
 const SPARKLE_COUNT = 8;
 const SPARKLE_RADIUS = 64;
@@ -224,6 +230,7 @@ function Sparkle({
   );
 }
 
+// source: 92-93
 function Gauge({
   icon,
   color,
@@ -365,39 +372,45 @@ export default function ChatScreen() {
   const [streakNextMilestone, setStreakNextMilestone] = useState<number | null>(3);
 
   const [coachStep, setCoachStep] = useState(0);
-  const [coachTarget, setCoachTarget] = useState<{ x: number; y: number; width: number; height: number } | null>(
-    null
-  );
+  const [coachTarget, setCoachTarget] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [bubbleContentSize, setBubbleContentSize] = useState({ width: 0, height: 0 });
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const avatarWrapRef = useRef<View>(null);
   const gaugeStackRef = useRef<View>(null);
   const inputRowRef = useRef<View>(null);
   const userAvatarRef = useRef<View>(null);
   const settingsButtonRef = useRef<View>(null);
   const firstBubbleRef = useRef<View>(null);
-  
+
+  // ⭐️ 요청하신 위치에 키보드 리스너 useEffect 결합 완료
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const [fontsLoaded] = useFonts({ Fredoka_600SemiBold, Fredoka_700Bold });
   const insets = useSafeAreaInsets();
+
   function measureCoachTarget(ref: RefObject<View | null>) {
-    const doMeasure = (isRetry: boolean) => {
+    const doMeasure = () => {
       ref.current?.measureInWindow((x, y, width, height) => {
         if (width === 0 && height === 0) {
-          requestAnimationFrame(() => doMeasure(isRetry));
+          requestAnimationFrame(doMeasure);
         } else {
           setCoachTarget({ x, y, width, height });
-          // 상태바/네비바 전환이 끝나기 전에 측정될 수 있어서, 살짝 늦게
-          // 한 번 더 재측정해서 어긋난 위치를 자동으로 보정한다.
-          if (!isRetry) {
-            setTimeout(() => doMeasure(true), 280);
-          }
         }
       });
     };
-    doMeasure(false);
+    doMeasure();
+    setTimeout(doMeasure, 180);
+    setTimeout(doMeasure, 420);
   }
 
-    useEffect(() => {
+  useEffect(() => {
     if (coachStep === 1) measureCoachTarget(avatarWrapRef);
     else if (coachStep === 2) measureCoachTarget(gaugeStackRef);
     else if (coachStep === 3) measureCoachTarget(inputRowRef);
@@ -426,6 +439,7 @@ export default function ChatScreen() {
       .catch(() => {});
   }
 
+  // source: 136-137
   function dismissCoachMarks() {
     setCoachStep(0);
     setCoachTarget(null);
@@ -434,6 +448,7 @@ export default function ChatScreen() {
 
   function advanceCoachMarks() {
     if (coachStep < coachSteps.length) {
+      setCoachTarget(null);
       setCoachStep((s) => s + 1);
     } else {
       dismissCoachMarks();
@@ -449,7 +464,6 @@ export default function ChatScreen() {
   const bgColor = activeTheme?.bg ?? colors.background;
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
   const userGlowColor = complementaryColor(companion?.accent ?? "#7C8CFF");
-
   const coachSteps = [
     { text: "tap me anytime to replay my intro 🎬", color: companion?.accent ?? "#8B7CF6" },
     { text: "💗 relationship & 🔥 streak — keep these glowing every day", color: "#FF8FAB" },
@@ -458,7 +472,6 @@ export default function ChatScreen() {
     { text: "long press any message to share it 📤", color: "#39E6FF" },
     { text: "I'm all set up! tap here for settings anytime ⚙️", color: "#FFB84D" },
   ];
-  
 
   const breath = useSharedValue(0.4);
   useEffect(() => {
@@ -479,7 +492,6 @@ export default function ChatScreen() {
   const introOverlayAnimatedStyle = useAnimatedStyle(() => ({
     opacity: introOverlayOpacity.value,
   }));
-
   const introFlashStyle = useAnimatedStyle(() => ({
     opacity: introFlashOpacity.value,
     transform: [{ scale: introFlashScale.value }],
@@ -512,7 +524,6 @@ export default function ChatScreen() {
     transform: [{ scale: paletteScale.value }],
   }));
 
-      
   useEffect(() => {
     (async () => {
       const session = await getSession();
@@ -730,7 +741,6 @@ export default function ChatScreen() {
           setInitializing(false);
         } else if (!greetingTried.current) {
           greetingTried.current = true;
-
           try {
             const { status: permStatus } = await Notifications.getPermissionsAsync();
             if (permStatus === "undetermined") {
@@ -751,7 +761,6 @@ export default function ChatScreen() {
 
           const greetingPromise = getGreeting();
           greetingPromise.catch(() => {});
-
           setTimeout(async () => {
             try {
               const greeting = await greetingPromise;
@@ -850,7 +859,6 @@ export default function ChatScreen() {
     setAdBonusOffer(false);
     addMessage("user", text);
     setSending(true);
-
     try {
       const result = await sendChat({ message: text });
       addMessage("assistant", result.reply);
@@ -1035,14 +1043,7 @@ export default function ChatScreen() {
                   stroke="#1A1330"
                   strokeWidth={6}
                   strokeLinejoin="miter"
-                />
-                <Path
-                  d={coachBubbleBodyPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)}
-                  fill="#8B7CF6"
-                  stroke="#1A1330"
-                  strokeWidth={6}
-                  strokeLinejoin="miter"
-                />
+                             />
               </Svg>
             )}
             <View
@@ -1063,10 +1064,7 @@ export default function ChatScreen() {
                 {coachSteps.map((step, i) => (
                   <View
                     key={i}
-                    style={[
-                      styles.coachDot,
-                      i === coachStep - 1 && [styles.coachDotActive, { backgroundColor: step.color }],
-                    ]}
+                    style={[styles.coachDot, i === coachStep - 1 && styles.coachDotActive]}
                   />
                 ))}
               </View>
@@ -1086,7 +1084,7 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView
         style={styles.flexFill}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : keyboardVisible ? "height" : undefined}
         keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
       >
         {(milestoneToast || levelUpToast || bonusToast) && (
@@ -1118,141 +1116,135 @@ export default function ChatScreen() {
         )}
 
         {!showIntroOverlay && !showFullscreenClip && (
-        <View style={styles.header}>
-          <View style={styles.headerSide}>
-            <View style={styles.avatarStack}>
-              <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
-                <Svg width={104} height={104} viewBox="0 0 104 104">
-                  <Defs>
-                    <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
-                      <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
-                      <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
-                      <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
-                    </RadialGradient>
-                  </Defs>
-                  <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
-                </Svg>
-              </Animated.View>
+          <View style={styles.header}>
+            <View style={styles.headerSide}>
+              <View style={styles.avatarStack}>
+                <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
+                  <Svg width={104} height={104} viewBox="0 0 104 104">
+                    <Defs>
+                      <RadialGradient id="glowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
+                        <Stop offset="0%" stopColor={glowColor} stopOpacity={hasGlow ? 0.9 : 0} />
+                        <Stop offset="65%" stopColor={glowColor} stopOpacity={hasGlow ? 0.45 : 0} />
+                        <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
+                      </RadialGradient>
+                    </Defs>
+                    <Circle cx="52" cy="52" r="52" fill="url(#glowGradient)" />
+                  </Svg>
+                </Animated.View>
 
-              <Pressable
-                ref={avatarWrapRef}
-                onPress={() => {
-                  if (!companion) return;
-                  fullscreenPlayer.replace(assetUrl(introClipPath(companion.id)));
-                  fullscreenPlayer.play();
-                  setShowFullscreenClip(true);
-                }}
-                style={styles.avatarWrap}
+                <Pressable
+                  ref={avatarWrapRef}
+                  onPress={() => {
+                    if (!companion) return;
+                    fullscreenPlayer.replace(assetUrl(introClipPath(companion.id)));
+                    fullscreenPlayer.play();
+                    setShowFullscreenClip(true);
+                  }}
+                  style={styles.avatarWrap}
+                >
+                  {companion?.facePath && (
+                    <Image
+                      source={{ uri: assetUrl(companion.facePath) }}
+                      style={styles.avatarMedia}
+                      resizeMode="cover"
+                    />
+                  )}
+                  <VideoView
+                    key={`a-${resumeKey}`}
+                    player={playerA}
+                    style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]}
+                    contentFit="cover"
+                    nativeControls={false}
+                  />
+                  <VideoView
+                    key={`b-${resumeKey}`}
+                    player={playerB}
+                    style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
+                    contentFit="cover"
+                    nativeControls={false}
+                  />
+                  <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
+                    <Defs>
+                      <Mask id="avatarCircleMask">
+                        <Rect x="0" y="0" width="72" height="72" fill="white" />
+                        <Circle cx="36" cy="36" r="34" fill="black" />
+                      </Mask>
+                    </Defs>
+                    <Rect
+                      x="0"
+                      y="0"
+                      width="72"
+                      height="72"
+                      fill={colors.background}
+                      mask="url(#avatarCircleMask)"
+                    />
+                  </Svg>
+                </Pressable>
+              </View>
+              <Text
+                style={[styles.sideName, { color: companion?.accent ?? colors.textPrimary }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
               >
-                {companion?.facePath && (
-                  <Image
-                    source={{ uri: assetUrl(companion.facePath) }}
-                    style={styles.avatarMedia}
-                    resizeMode="cover"
-                  />
-                )}
-                <VideoView
-                  key={`a-${resumeKey}`}
-                  player={playerA}
-                  style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]}
-                  contentFit="cover"
-                  nativeControls={false}
-                />
-                <VideoView
-                  key={`b-${resumeKey}`}
-                  player={playerB}
-                  style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
-                  contentFit="cover"
-                  nativeControls={false}
-                />
-                <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
-                  <Defs>
-                    <Mask id="avatarCircleMask">
-                      <Rect x="0" y="0" width="72" height="72" fill="white" />
-                      <Circle cx="36" cy="36" r="34" fill="black" />
-                    </Mask>
-                  </Defs>
-                  <Rect
-                    x="0"
-                    y="0"
-                    width="72"
-                    height="72"
-                    fill={colors.background}
-                    mask="url(#avatarCircleMask)"
-                  />
-                </Svg>
-              </Pressable>
-            </View>
-            <Text
-              style={[styles.sideName, { color: companion?.accent ?? colors.textPrimary }]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {companion?.name ?? companionName ?? "Friend"}
-            </Text>
-          </View>
-
-          <View style={styles.headerCenter}>
-            <View style={styles.centerRow}>
-              <View style={styles.gaugeStack} ref={gaugeStackRef}>
-                <Gauge
-                  icon="♥"
-                  color="#FF8FAB"
-                  segments={3}
-                  filled={Math.round((relationshipProgressPct / 100) * 3)}
-                  label={`Lv.${relationshipLevel}`}
-                />
-                <Gauge
-                  icon="🔥"
-                  color="#FFB84D"
-                  segments={
-                    streakNextMilestone != null ? streakNextMilestone - streakPrevMilestone : 1
-                  }
-                  filled={
-                    streakNextMilestone != null
-                      ? currentStreak - streakPrevMilestone
-                      : 1
-                  }
-                  label={`${currentStreak}`}
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.headerSide}>
-            <Pressable onPress={handlePickUserPhoto} style={styles.userAvatarStack} ref={userAvatarRef}>
-              <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
-                <Svg width={104} height={104} viewBox="0 0 104 104">
-                  <Defs>
-                    <RadialGradient id="userGlowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
-                      <Stop offset="0%" stopColor={userGlowColor} stopOpacity={0.9} />
-                      <Stop offset="65%" stopColor={userGlowColor} stopOpacity={0.45} />
-                      <Stop offset="100%" stopColor={userGlowColor} stopOpacity={0} />
-                    </RadialGradient>
-                  </Defs>
-                  <Circle cx="52" cy="52" r="52" fill="url(#userGlowGradient)" />
-                </Svg>
-              </Animated.View>
-              <View style={styles.userAvatarCircle}>
-                {userPhotoUri ? (
-                  <Image source={{ uri: userPhotoUri }} style={styles.userAvatarImage} />
-                ) : (
-                  <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
-                )}
-              </View>
-              {!userPhotoUri && (
-                <View style={styles.userPhotoHint}>
-                  <Text style={styles.userPhotoHintText}>📷</Text>
-                </View>
-              )}
-            </Pressable>
-            {userName && (
-              <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">
-                {userName}
+                {companion?.name ?? companionName ?? "Friend"}
               </Text>
-            )}
+            </View>
+
+            <View style={styles.headerCenter}>
+              <View style={styles.centerRow}>
+                <View style={styles.gaugeStack} ref={gaugeStackRef}>
+                  <Gauge
+                    icon="♥"
+                    color="#FF8FAB"
+                    segments={3}
+                    filled={Math.round((relationshipProgressPct / 100) * 3)}
+                    label={`Lv.${relationshipLevel}`}
+                  />
+                  <Gauge
+                    icon="🔥"
+                    color="#FFB84D"
+                    segments={streakNextMilestone != null ? streakNextMilestone - streakPrevMilestone : 1}
+                    filled={streakNextMilestone != null ? currentStreak - streakPrevMilestone : 1}
+                    label={`${currentStreak}`}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.headerSide}>
+              <Pressable onPress={handlePickUserPhoto} style={styles.userAvatarStack} ref={userAvatarRef}>
+                <Animated.View style={[styles.glowSvgWrap, animatedGlowStyle]} pointerEvents="none">
+                  <Svg width={104} height={104} viewBox="0 0 104 104">
+                    <Defs>
+                      <RadialGradient id="userGlowGradient" cx="52" cy="52" r="52" gradientUnits="userSpaceOnUse">
+                        <Stop offset="0%" stopColor={userGlowColor} stopOpacity={0.9} />
+                        <Stop offset="65%" stopColor={userGlowColor} stopOpacity={0.45} />
+                        <Stop offset="100%" stopColor={userGlowColor} stopOpacity={0} />
+                      </RadialGradient>
+                    </Defs>
+                    <Circle cx="52" cy="52" r="52" fill="url(#userGlowGradient)" />
+                  </Svg>
+                </Animated.View>
+                <View style={styles.userAvatarCircle}>
+                  {userPhotoUri ? (
+                    <Image source={{ uri: userPhotoUri }} style={styles.userAvatarImage} />
+                  ) : (
+                    <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
+                  )}
+                </View>
+                {!userPhotoUri && (
+                  <View style={styles.userPhotoHint}>
+                    <Text style={styles.userPhotoHintText}>📷</Text>
+                  </View>
+                )}
+              </Pressable>
+              {userName && (
+                <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">
+                  {userName}
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
         )}
 
         <FlatList
@@ -1319,7 +1311,13 @@ export default function ChatScreen() {
           </Pressable>
         )}
 
-        <View style={[styles.inputRow, { paddingBottom: Math.max(spacing.sm, insets.bottom) }]} ref={inputRowRef}>
+        <View
+          style={[
+            styles.inputRow,
+            { paddingBottom: keyboardVisible ? spacing.sm : Math.max(spacing.sm, insets.bottom) },
+          ]}
+          ref={inputRowRef}
+        >
           <Pressable ref={settingsButtonRef} onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInputRow}>
             <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
               <Text style={styles.settingsButtonText}>⚙️</Text>
@@ -1543,7 +1541,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.35)",
   },
   coachDotActive: {
-    backgroundColor: "#1A1014",
+    backgroundColor: "#FFFFFF",
   },
   coachSkip: {
     position: "absolute",
