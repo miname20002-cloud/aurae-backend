@@ -11,12 +11,10 @@ import {
   Platform,
   ActivityIndicator,
   AppState,
-  StatusBar,
   Share,
   Modal,
   Image,
   Dimensions,
-  Keyboard,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
@@ -57,7 +55,7 @@ import {
 } from "@/lib/api";
 import { companionByName } from "@/lib/companions";
 import { getSession } from "@/lib/session";
-import * as NavigationBar from 'expo-navigation-bar';
+import { SystemBars } from "react-native-edge-to-edge";
 
 type Message = {
   id: string;
@@ -85,7 +83,7 @@ const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
 // SDK requestConfiguration의 testDeviceIdentifiers) 진짜 ID를 쓰면서도
 // 항상 테스트광고만 받게 하는 방법을 추천한다.
 const AD_BONUS_UNIT_ID = TestIds.REWARDED; // TODO: 정식 출시 직전에만 "ca-app-pub-9861327921813724/2624188129"로 교체
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
 const SPARKLE_LINGER_MS = 400; // how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
 const INTRO_FADE_OUT_MS = 600; // smooth fade duration as the intro overlay dissolves into the revealed chat UI
@@ -270,9 +268,9 @@ function Gauge({
 }
 
 function coachBubbleBodyPath(w: number, h: number): string {
-  const spikes = 14; // 둘레를 따라 도는 뾰족 칼날 개수
-  const spikeDepth = 8; // 칼날이 바깥으로 튀어나오는 깊이
-  const valleyDepth = 3; // 칼날 사이가 안으로 들어가는 깊이
+  const spikes = 11; // 둘레를 따라 도는 뾰족 칼날 개수
+  const spikeDepth = 16; // 칼날이 바깥으로 튀어나오는 깊이
+  const valleyDepth = 10; // 칼날 사이가 안으로 들어가는 깊이
   const sideLengths = [w, h, w, h];
   const perimeter = 2 * (w + h);
 
@@ -301,10 +299,10 @@ function coachBubbleBodyPath(w: number, h: number): string {
   return d + " Z";
 }
 
-function coachBubbleTailShapePath(w: number, h: number, side: "top" | "bottom"): string {
+function coachBubbleTailShapePath(w: number, h: number, side: "top" | "bottom", tailCenterX: number): string {
   const tailWidth = Math.min(w * 0.16, 36);
   const tailLength = 22;
-  const cx = w / 2;
+  const cx = tailCenterX;
   if (side === "bottom") {
     return `M${cx - tailWidth / 2},${h - 14} L${cx},${h + tailLength} L${cx + tailWidth / 2},${h - 14} Z`;
   }
@@ -514,38 +512,7 @@ export default function ChatScreen() {
     transform: [{ scale: paletteScale.value }],
   }));
 
-      useEffect(() => {
-    if (showIntroOverlay || showFullscreenClip) {
-      StatusBar.setHidden(true, "fade");
-      NavigationBar.setVisibilityAsync('hidden');
-    } else {
-      StatusBar.setHidden(false, "fade");
-      StatusBar.setBarStyle("light-content", true);
-      StatusBar.setBackgroundColor(bgColor, true);
-      NavigationBar.setPositionAsync('absolute');
-      NavigationBar.setBackgroundColorAsync('#00000000');
-      NavigationBar.setButtonStyleAsync('light');
-      NavigationBar.setVisibilityAsync('visible');
-    }
-  }, [showIntroOverlay, showFullscreenClip, bgColor]);
-
-  useEffect(() => {
-  const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-    if (!showIntroOverlay && !showFullscreenClip) {
-      NavigationBar.setBackgroundColorAsync('#00000000');
-    }
-  });
-  const showSub = Keyboard.addListener("keyboardDidShow", () => {
-    if (!showIntroOverlay && !showFullscreenClip) {
-      NavigationBar.setBackgroundColorAsync('#00000000');
-    }
-  });
-  return () => {
-    hideSub.remove();
-    showSub.remove();
-  };
-}, [bgColor, showIntroOverlay, showFullscreenClip]);
-
+      
   useEffect(() => {
     (async () => {
       const session = await getSession();
@@ -957,6 +924,13 @@ export default function ChatScreen() {
 
   return (
     <Screen style={{ ...styles.container, backgroundColor: bgColor, paddingBottom: 0 }}>
+      <SystemBars
+        style={{ statusBar: "light", navigationBar: "light" }}
+        hidden={{
+          statusBar: showIntroOverlay || showFullscreenClip,
+          navigationBar: showIntroOverlay || showFullscreenClip,
+        }}
+      />
       {showIntroOverlay && (
         <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
           <VideoView
@@ -1041,18 +1015,32 @@ export default function ChatScreen() {
                   d={coachBubbleTailShapePath(
                     bubbleContentSize.width + 24,
                     bubbleContentSize.height + 24,
-                    coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "bottom" : "top"
+                    coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "bottom" : "top",
+                    Math.min(
+                      Math.max(
+                        (bubbleContentSize.width + 24) / 2 + (coachTarget.x + coachTarget.width / 2 - SCREEN_WIDTH / 2),
+                        30
+                      ),
+                      bubbleContentSize.width + 24 - 30
+                    )
                   )}
-                  fill="#FFFFFF"
-                  stroke="#8B7CF6"
-                  strokeWidth={5}
+                  fill="#8B7CF6"
+                  stroke="#1A1330"
+                  strokeWidth={6}
                   strokeLinejoin="round"
                 />
                 <Path
                   d={coachBubbleBodyPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)}
-                  fill="#FFFFFF"
-                  stroke="#8B7CF6"
-                  strokeWidth={5}
+                  fill="#8B7CF6"
+                  stroke="#1A1330"
+                  strokeWidth={6}
+                  strokeLinejoin="miter"
+                />
+                <Path
+                  d={coachBubbleBodyPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)}
+                  fill="#8B7CF6"
+                  stroke="#1A1330"
+                  strokeWidth={6}
                   strokeLinejoin="miter"
                 />
               </Svg>
@@ -1535,7 +1523,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
   },
   coachBubbleText: {
-    color: "#241B33",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
     textAlign: "center",
@@ -1552,7 +1540,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "rgba(26,16,20,0.25)",
+    backgroundColor: "rgba(255,255,255,0.35)",
   },
   coachDotActive: {
     backgroundColor: "#1A1014",
