@@ -524,7 +524,7 @@ export default function ChatScreen() {
       StatusBar.setBackgroundColor(bgColor, true);
       NavigationBar.setPositionAsync('absolute');
       NavigationBar.setBackgroundColorAsync('#00000000');
-      NavigationBar.setButtonStyle('light');
+      NavigationBar.setButtonStyleAsync('light');
       NavigationBar.setVisibilityAsync('visible');
     }
   }, [showIntroOverlay, showFullscreenClip, bgColor]);
