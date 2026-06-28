@@ -984,15 +984,16 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {coachStep > 0 && coachTarget && (
+      {coachStep > 0 && (
         <View style={styles.coachOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
+          {coachTarget && (
           <View
             style={[
               styles.coachHighlight,
               {
                 left: coachTarget.x - 6,
-                top: coachTarget.y - 6,
+                top: coachTarget.y - 6 + (coachStep === 6 ? 8 : 0),
                 width: coachTarget.width + 12,
                 height: coachTarget.height + 12,
                 borderRadius:
@@ -1003,6 +1004,8 @@ export default function ChatScreen() {
             ]}
             pointerEvents="none"
           />
+          )}
+          {coachTarget && (
           <View
             style={[
               styles.coachBubble,
@@ -1070,6 +1073,7 @@ export default function ChatScreen() {
               </View>
             </View>
           </View>
+          )}
           <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
             <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>skip</Text>
           </Pressable>
