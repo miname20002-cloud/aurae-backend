@@ -11,9 +11,11 @@
     "update-download": "node scripts/update-download-page.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.107.0",
     "@expo-google-fonts/fredoka": "^0.4.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@sentry/react-native": "~7.2.0",
+    "dotenv": "^17.4.2",
     "expo": "~54.0.0",
     "expo-asset": "~12.0.13",
     "expo-constants": "~18.0.13",
