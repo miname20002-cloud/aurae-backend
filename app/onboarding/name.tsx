@@ -8,12 +8,6 @@ import { useOnboarding } from "@/context/OnboardingContext";
 
 const NAME_REGEX = /^[a-zA-Z가-힣\s]+$/;
 
-// 알림 권한(OS 다이얼로그)을 온보딩 첫 페이지를 넘어가는 시점에 미리
-// 요청해둔다. 이걸 chat.tsx(인트로 영상 재생 화면)에서 요청하면 다이얼로그가
-// 인트로 영상 위에 끼어들어서 몰입이 깨지기 때문에, 여기서 끝내놓고
-// chat.tsx에서는 "이미 허용됐는지"만 조회해서 토큰 등록만 한다.
-//
-// 실패(거부/시뮬레이터 등)해도 조용히 무시 - 온보딩 진행 자체를 막지 않는다.
 async function requestNotificationPermissionEarly() {
   try {
     if (Platform.OS === "android") {
@@ -52,26 +46,24 @@ export default function NameScreen() {
     setError(null);
     setName(trimmed);
 
-    // await 하지 않는다 - 다이얼로그 응답을 기다리느라 다음 화면 전환이
-    // 막히면 안 된다. 사용자가 gender 화면으로 넘어간 직후(=첫 페이지를
-    // 넘어간 시점) 다이얼로그가 뜨고, 그 위에서 응답하면 된다.
     requestNotificationPermissionEarly();
-
     router.push("/onboarding/gender");
   }
 
   return (
     <Screen style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>What should we call you?</Text>
-        <Text style={styles.body}>Enter your name to continue.</Text>
+        {/* 🌟 럭셔리 Gen Z 감성의 카피라이팅으로 변경 */}
+        <Text style={styles.title}>Define your profile.</Text>
+        <Text style={styles.body}>How should Aurae address you?</Text>
+        
         <TextInput
           value={input}
           onChangeText={(text) => {
             setInput(text);
             if (error) setError(null);
           }}
-          placeholder="Your name"
+          placeholder="Enter your name"
           placeholderTextColor={colors.textTertiary}
           style={styles.input}
           autoFocus
@@ -80,14 +72,16 @@ export default function NameScreen() {
           onSubmitEditing={handleNext}
           maxLength={20}
         />
-       <View style={styles.noticeRow}>
-          <Text style={styles.noticeIcon}>⚠️</Text>
+        
+        <View style={styles.noticeRow}>
+          <Text style={styles.noticeIcon}>✦</Text>
           <Text style={styles.noticeText}>
-            Your name can't be changed after signup. Choose carefully.
+            Your registered name cannot be altered post-signup. Choose with intent.
           </Text>
         </View>
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
+      
       <View style={styles.bottom}>
         <Pressable
           onPress={handleNext}
@@ -99,7 +93,7 @@ export default function NameScreen() {
           ]}
         >
           <Text style={[styles.ctaText, !input.trim() && styles.ctaTextDisabled]}>
-            Next
+            Continue
           </Text>
         </Pressable>
         <Pressable onPress={() => router.back()}>
@@ -110,6 +104,7 @@ export default function NameScreen() {
   );
 }
 
+// 스타일 시트는 대장이 짠 레이아웃이 훌륭하므로 기존 그대로 유지!
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -148,6 +143,7 @@ const styles = StyleSheet.create({
   },
   noticeIcon: {
     fontSize: 12,
+    color: colors.textTertiary,
   },
   noticeText: {
     flex: 1,
