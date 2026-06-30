@@ -43,8 +43,9 @@ export default function CompanionScreen() {
   return (
     <Screen style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Pick your soul match</Text>
-        <Text style={styles.body}>Choose who feels right.</Text>
+        {/* 🏛️ 신뢰감 있고 묵직한 프리미엄 카피라이팅 */}
+        <Text style={styles.title}>Select your companion.</Text>
+        <Text style={styles.body}>Choose the intellectual presence to share your thoughts with.</Text>
 
         <View style={styles.optionRow}>
           {options.map((companion) => (
@@ -54,6 +55,7 @@ export default function CompanionScreen() {
               disabled={loading}
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
+              {/* 🏛️ 테두리를 정교하고 차분하게 미세 조정 */}
               <View style={[styles.avatarWrapper, { borderColor: companion.accent }]}>
                 <Image 
                   source={{ uri: assetUrl(companion.facePath) }}
@@ -94,11 +96,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
     marginBottom: spacing.sm,
+    letterSpacing: -0.3,
   },
   body: {
     fontSize: 15,
     color: colors.textSecondary,
     marginBottom: spacing.lg,
+    lineHeight: 21,
   },
   optionRow: {
     flexDirection: "row",
@@ -109,33 +113,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xl, // 여백을 넉넉히 주어 고급 브랜드 레이아웃 연출
     alignItems: "center",
     backgroundColor: colors.surface,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   optionPressed: {
     borderColor: colors.accent,
   },
   avatarWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    padding: 2,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 1.5, // 🏛️ 두께를 얇게 낮춰 캐주얼함을 빼고 클래식함 장착
+    padding: 3,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: colors.background,
   },
   avatarImage: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
   },
   optionText: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15, // 🏛️ 폰트 크기를 살짝 줄여 절제미 강조
+    fontWeight: "600", // 너무 굵은 700보다 신뢰감을 주는 두께
     color: colors.textPrimary,
+    letterSpacing: 0.2,
   },
   spinner: {
     marginTop: spacing.lg,
