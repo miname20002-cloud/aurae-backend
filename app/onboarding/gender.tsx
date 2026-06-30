@@ -7,7 +7,7 @@ import { useOnboarding } from "@/context/OnboardingContext";
 const FEMME_COLOR = "#FF8FAB";
 const HOMME_COLOR = "#4F9DFF";
 
-def function hexToRgba(hex: string, alpha: number): string {
+function hexToRgba(hex: string, alpha: number): string {
   const sanitized = hex.replace("#", "");
   const bigint = parseInt(sanitized, 16);
   const r = (bigint >> 16) & 255;
