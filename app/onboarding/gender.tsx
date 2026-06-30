@@ -4,10 +4,10 @@ import { useRouter } from "expo-router";
 import { colors, spacing, radius } from "@/theme/colors";
 import { useOnboarding } from "@/context/OnboardingContext";
 
-const GIRL_COLOR = "#FF8FAB";
-const GUY_COLOR = "#4F9DFF";
+const FEMME_COLOR = "#FF8FAB";
+const HOMME_COLOR = "#4F9DFF";
 
-function hexToRgba(hex: string, alpha: number): string {
+def function hexToRgba(hex: string, alpha: number): string {
   const sanitized = hex.replace("#", "");
   const bigint = parseInt(sanitized, 16);
   const r = (bigint >> 16) & 255;
@@ -28,29 +28,33 @@ export default function GenderScreen() {
   return (
     <Screen style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Who do you want to connect with?</Text>
-        <Text style={styles.body}>Pick the energy you vibe with.</Text>
+        {/* 🏛️ 세대를 아우르는 정중하고 직관적인 카피라이팅 */}
+        <Text style={styles.title}>Select a presence.</Text>
+        <Text style={styles.body}>Choose the voice you would like to converse with.</Text>
 
         <View style={styles.optionRow}>
           <Pressable
             onPress={() => choose("female")}
             style={({ pressed }) => [
               styles.option,
-              { backgroundColor: hexToRgba(GIRL_COLOR, 0.14), borderColor: hexToRgba(GIRL_COLOR, 0.4) },
-              pressed && { borderColor: GIRL_COLOR, backgroundColor: hexToRgba(GIRL_COLOR, 0.22) },
+              { backgroundColor: hexToRgba(FEMME_COLOR, 0.10), borderColor: hexToRgba(FEMME_COLOR, 0.3) },
+              pressed && { borderColor: FEMME_COLOR, backgroundColor: hexToRgba(FEMME_COLOR, 0.18) },
             ]}
           >
-            <Text style={[styles.optionText, { color: GIRL_COLOR }]}>Girl</Text>
+            {/* 🏛️ 가볍지 않고 명확한 클래식 라벨 */}
+            <Text style={[styles.optionText, { color: FEMME_COLOR }]}>Woman</Text>
           </Pressable>
+          
           <Pressable
             onPress={() => choose("male")}
             style={({ pressed }) => [
               styles.option,
-              { backgroundColor: hexToRgba(GUY_COLOR, 0.14), borderColor: hexToRgba(GUY_COLOR, 0.4) },
-              pressed && { borderColor: GUY_COLOR, backgroundColor: hexToRgba(GUY_COLOR, 0.22) },
+              { backgroundColor: hexToRgba(HOMME_COLOR, 0.10), borderColor: hexToRgba(HOMME_COLOR, 0.3) },
+              pressed && { borderColor: HOMME_COLOR, backgroundColor: hexToRgba(HOMME_COLOR, 0.18) },
             ]}
           >
-            <Text style={[styles.optionText, { color: GUY_COLOR }]}>Guy</Text>
+            {/* 🏛️ 가볍지 않고 명확한 클래식 라벨 */}
+            <Text style={[styles.optionText, { color: HOMME_COLOR }]}>Man</Text>
           </Pressable>
         </View>
       </View>
@@ -80,11 +84,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
     marginBottom: spacing.sm,
+    letterSpacing: -0.3, // 묵직하고 밀도 있는 느낌을 위해 자간 밀착
   },
   body: {
     fontSize: 15,
     color: colors.textSecondary,
     marginBottom: spacing.lg,
+    lineHeight: 21,
   },
   optionRow: {
     flexDirection: "row",
@@ -92,14 +98,15 @@ const styles = StyleSheet.create({
   },
   option: {
     flex: 1,
-    borderWidth: 1.5,
+    borderWidth: 1.2,
     borderRadius: radius.md,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.lg, // 너무 과하지 않은 안정적인 높이감 유지
     alignItems: "center",
   },
   optionText: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 17, 
+    fontWeight: "600", // 너무 두꺼워서 스포티해 보이는 것보다 신뢰감 있는 굵기
+    letterSpacing: 0.2,
   },
   bottom: {
     paddingBottom: spacing.xl,
