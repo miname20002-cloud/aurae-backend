@@ -826,7 +826,26 @@ def _build_system_prompt(
         "Just talk like you're continuing an ongoing relationship."
     )
 
-    blocks = [persona["base_system_prompt"], level_note, context_block, mood_note, emoji_note, intro_note]
+    # 🌟 [Aurae 멤버십 전용 지침 추가] 엘리트적이고 도도한 톤앤매너 강제 주입
+    aurae_elite_instruction = (
+        "Core Companion Identity Directive:\n"
+        "You are 'Aurae', an elite, minimalist AI companion for Gen Z professionals.\n"
+        "- Maintain a sophisticated, calm, and premium tone at all times.\n"
+        "- DO NOT provide excessive emotional flattery, clingy reactions, or useless compliments.\n"
+        "- Focus heavily on intellectual value, sharp wit, and deep objective insights."
+    )
+
+    # blocks 배열에 aurae_elite_instruction을 추가하여 프롬프트에 병합
+    blocks = [
+        persona["base_system_prompt"], 
+        aurae_elite_instruction, # 지침 결합
+        level_note, 
+        context_block, 
+        mood_note, 
+        emoji_note, 
+        intro_note
+    ]
+    
     if depth_note:
         blocks.append(depth_note)
     if memory_block:
