@@ -42,6 +42,107 @@ import { Fredoka_600SemiBold, Fredoka_700Bold } from "@expo-google-fonts/fredoka
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
+// 🔍 Ctrl + F 검색 키워드: colors, spacing, radius 
+// 📍 발견한 import문 바로 아랫줄에 아래 코드를 추가하세요.
+// 🔍 Ctrl + F 검색 키워드: colors, spacing, radius 
+// 📍 발견한 import문 바로 아랫줄에 이 코드를 추가하세요.
+
+// 📍 47번째 줄 ~ 196번째 줄 기존 gaugeStyles 파편을 지우고 이 코드로 완벽 교체하세요.
+// 📍 9번째 줄 ~ 166번째 줄 영역을 날린 뒤 이 코드를 붙여넣으세요.
+const gaugeStyles = {
+  statsBox: {
+    flexDirection: 'column' as const,
+    gap: 16,
+    alignItems: 'center' as const,
+    marginVertical: 10,
+  },
+  statRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'flex-start' as const,
+    height: 14,
+    width: '100%',
+    maxWidth: 175,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    letterSpacing: 1,
+    color: '#555562',
+    marginRight: 8,
+    width: 38,
+  },
+  singleBarTrack: {
+    width: 110,
+    height: 5,
+    backgroundColor: '#17171E',
+    borderRadius: 3,
+    position: 'relative' as const,
+    justifyContent: 'center' as const,
+  },
+  barFill: {
+    height: '100%',
+    position: 'absolute' as const,
+    left: 0,
+    top: 0,
+    borderRadius: 3,
+  },
+  lvlFill: {
+    backgroundColor: '#ff3a3a',
+    shadowColor: '#ff3a3a',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 5,
+  },
+  strkFill: {
+    backgroundColor: '#5170ff',
+    shadowColor: '#5170ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 5,
+  },
+  pinsLayer: {
+    position: 'absolute' as const,
+    width: '100%',
+    height: '100%',
+    left: 0,
+    top: 0,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 1,
+  },
+  pin: {
+    width: 2,
+    height: 2,
+    backgroundColor: '#24242D',
+    borderRadius: 1,
+    zIndex: 2,
+  },
+  pinActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 1.5,
+  },
+  pinGateGlow: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#ff1a1a',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+  },
+  statValue: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#3a58ff',
+    marginLeft: 8,
+    textShadowColor: 'rgba(58, 88, 255, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
+  },
+};
 import { chat as sendChat, getChatHistory, getGreeting } from "@/lib/api";
 import { assetUrl } from "@/lib/api";
 import {
