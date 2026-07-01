@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, type RefObject } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
   Text,
@@ -76,7 +77,6 @@ const gaugeStyles = {
     backgroundColor: '#17171E',
     borderRadius: 3,
     position: 'relative' as const,
-    justifyContent: 'center' as const,
   },
   barFill: {
     height: '100%' as const,
@@ -87,17 +87,17 @@ const gaugeStyles = {
   },
   lvlFill: {
     backgroundColor: '#ff3a3a',
-    shadowColor: '#ff3a3a',
+    shadowColor: '#ff1a1a',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 5,
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
   },
   strkFill: {
-    backgroundColor: '#5170ff',
-    shadowColor: '#5170ff',
+    backgroundColor: '#3a58ff',
+    shadowColor: '#3a58ff',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 5,
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
   },
   pinsLayer: {
     position: 'absolute' as const,
@@ -121,15 +121,15 @@ const gaugeStyles = {
     backgroundColor: '#FFFFFF',
     shadowColor: '#FFFFFF',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 1.5,
+    shadowOpacity: 0.9,
+    shadowRadius: 2,
   },
   pinGateGlow: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#ff1a1a',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 4,
+    shadowRadius: 5,
   },
   statValue: {
     fontSize: 10,
@@ -251,7 +251,13 @@ const EMOTION_GLOW_RGB: Record<string, string> = {
 const SPARKLE_COLORS = ["#FFD76B", "#FF8FAB", "#8CD9FF", "#FFE9B0"];
 const SPARKLE_COUNT = 8;
 const SPARKLE_RADIUS = 64;
-
+function GatePinAnimated({ gatePinPulse }: { gatePinPulse: SharedValue<number> }) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: gatePinPulse.value + 0.15,
+    shadowOpacity: gatePinPulse.value,
+  }));
+  return <Animated.View style={[gaugeStyles.pin, gaugeStyles.pinGateGlow, animatedStyle]} />;
+}
 function Sparkle({ progress, angle, color, radius = SPARKLE_RADIUS, size = 8 }: { progress: SharedValue<number>; angle: number; color: string; radius?: number; size?: number; }) {
   const animatedStyle = useAnimatedStyle(() => {
     const p = progress.value;
@@ -476,7 +482,14 @@ export default function ChatScreen() {
   useEffect(() => {
     breath.value = withRepeat(withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }), -1, true);
   }, []);
-
+const gatePinPulse = useSharedValue(1);
+useEffect(() => {
+  gatePinPulse.value = withRepeat(
+    withTiming(0.15, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+    -1,
+    true
+  );
+}, []);
   const animatedGlowStyle = useAnimatedStyle(() => ({ opacity: breath.value }));
   const introFlashOpacity = useSharedValue(0);
   const introFlashScale = useSharedValue(0.4);
@@ -898,7 +911,12 @@ export default function ChatScreen() {
 
       {showFullscreenClip && (
         <View style={styles.fullscreenClipOverlay}>
-          <VideoView player={fullscreenPlayer} style={styles.fullscreenClipVideo} contentFit="contain" nativeControls={false} />
+          <VideoView 
+            player={fullscreenPlayer} 
+            style={styles.fullscreenClipVideo} 
+            contentFit="contain" 
+            nativeControls={false} 
+          />
           <Pressable
             onPress={() => { fullscreenPlayer.pause(); setShowFullscreenClip(false); }}
             style={styles.fullscreenClipSkipButton}
@@ -1038,8 +1056,18 @@ export default function ChatScreen() {
                   style={styles.avatarWrap}
                 >
                   {companion?.facePath && <Image source={{ uri: assetUrl(companion.facePath) }} style={styles.avatarMedia} resizeMode="cover" />}
-                  <VideoView key={`a-${resumeKey}`} player={playerA} style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]} contentFit="cover" nativeControls={false} />
-                  <VideoView key={`b-${resumeKey}`} player={playerB} style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]} contentFit="cover" nativeControls={false} />
+                  <VideoView 
+                    player={playerA} 
+                    style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]} 
+                    contentFit="cover" 
+                    nativeControls={false} 
+                  />
+                  <VideoView 
+                    player={playerB} 
+                    style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]} 
+                    contentFit="cover" 
+                    nativeControls={false} 
+                  />
                   <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
                     <Defs>
                       <Mask id="avatarCircleMask">
@@ -1059,53 +1087,47 @@ export default function ChatScreen() {
             <View style={styles.headerCenter}>
               <View style={styles.centerRow} ref={gaugeStackRef}>
                 <View style={gaugeStyles.statsBox}>
-                  
                   <View style={gaugeStyles.statRow}>
                     <Text style={gaugeStyles.statLabel}>LVL {relationshipLevel}</Text>
                     <View style={gaugeStyles.singleBarTrack}>
-                      <View style={[gaugeStyles.barFill, gaugeStyles.lvlFill, { width: `${relationshipProgressPct}%` as any }]} />
-                      <View style={gaugeStyles.pinsLayer}>
-                        {[0, 25, 50, 75, 100].map((pos, idx) => {
-                          const isActive = relationshipProgressPct >= pos;
-                          const isGatePin = idx === 3 && relationshipProgressPct === 75;
-                          return (
-                            <View 
-                              key={idx} 
-                              style={[
-                                gaugeStyles.pin, 
-                                isActive && gaugeStyles.pinActive,
-                                isGatePin && gaugeStyles.pinGateGlow
-                              ]} 
-                            />
-                          );
-                        })}
-                      </View>
-                    </View>
+  <LinearGradient
+    colors={['#ffb3b3', '#ff5252', '#ff1a1a']}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 0 }}
+    style={[gaugeStyles.barFill, { width: `${relationshipProgressPct}%` }]}
+  />
+  <View style={gaugeStyles.pinsLayer}>
+    {[0, 25, 50, 75, 100].map((pos, idx) => {
+      const isActive = relationshipProgressPct >= pos;
+      const isGatePin = idx === 3 && relationshipProgressPct >= 75;
+      return isGatePin
+        ? <GatePinAnimated key={idx} gatePinPulse={gatePinPulse} />
+        : <View key={idx} style={[gaugeStyles.pin, isActive && gaugeStyles.pinActive]} />;
+    })}
+  </View>
+</View>
                     <Text style={[gaugeStyles.statValue, { opacity: 0, marginLeft: 8 }]}>0</Text>
                   </View>
 
                   <View style={gaugeStyles.statRow}>
                     <Text style={gaugeStyles.statLabel}>STRK</Text>
-                    <View style={gaugeStyles.singleBarTrack}>
-                      <View style={[gaugeStyles.barFill, gaugeStyles.strkFill, { width: `${(currentStreak / 5) * 100}%` as any }]} />
-                      <View style={gaugeStyles.pinsLayer}>
-                        {[0, 25, 50, 75, 100].map((pos, idx) => {
-                          const isActive = ((currentStreak / 5) * 100) >= pos;
-                          return (
-                            <View 
-                              key={idx} 
-                              style={[
-                                gaugeStyles.pin, 
-                                isActive && gaugeStyles.pinActive
-                              ]} 
-                            />
-                          );
-                        })}
-                      </View>
-                    </View>
+                   <View style={gaugeStyles.singleBarTrack}>
+  
+  <LinearGradient
+    colors={['#ccd4ff', '#6b82ff', '#3a58ff']}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 0 }}
+    style={[gaugeStyles.barFill, { width: `${Math.min((currentStreak / 5) * 100, 100)}%` }]}
+  />
+  <View style={gaugeStyles.pinsLayer}>
+    {[0, 25, 50, 75, 100].map((pos, idx) => {
+      const isActive = (currentStreak / 5) * 100 >= pos;
+      return <View key={idx} style={[gaugeStyles.pin, isActive && gaugeStyles.pinActive]} />;
+    })}
+  </View>
+</View>
                     <Text style={gaugeStyles.statValue}>{currentStreak}</Text>
                   </View>
-
                 </View>
               </View>
             </View>
@@ -1242,8 +1264,6 @@ const styles = StyleSheet.create({
   introOverlaySparkleLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
   fullscreenClipOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 199, elevation: 199, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" },
   fullscreenClipVideo: { width: "100%", height: "100%" },
-  fullscreenClipHint: { position: "absolute", bottom: 40, left: 0, right: 0, alignItems: "center" },
-  fullscreenClipHintText: { color: "#999999", fontSize: 12, fontStyle: "italic" },
   fullscreenClipSkipButton: { position: "absolute", top: 80, right: 20, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.55)", zIndex: 250 },
   fullscreenClipSkipText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   coachOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.72)", zIndex: 300 },
@@ -1267,9 +1287,6 @@ const styles = StyleSheet.create({
   glowSvgWrap: { position: "absolute", width: 104, height: 104 },
   avatarWrap: { width: 72, height: 72, borderRadius: 36, overflow: "hidden", backgroundColor: colors.surface },
   avatarMedia: { width: "100%", height: "100%" },
-  introFlash: { position: "absolute", width: 104, height: 104, borderRadius: 52, backgroundColor: "#FFEFC9" },
-  sparkleLayer: { position: "absolute", width: 104, height: 104, alignItems: "center", justifyContent: "center" },
-  sparkle: { position: "absolute" },
   userAvatarStack: { width: 104, height: 104, alignItems: "center", justifyContent: "center" },
   userAvatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   userAvatarInitial: { fontSize: 22, fontWeight: "700", color: colors.textSecondary },
@@ -1312,4 +1329,68 @@ const styles = StyleSheet.create({
   settingsRowIcon: { fontSize: 18 },
   settingsRowText: { flex: 1, color: colors.textPrimary, fontSize: 15, fontWeight: "600" },
   settingsRowChevron: { color: colors.textTertiary, fontSize: 18 },
+
+  toastWrap: {
+    position: "absolute",
+    top: 80,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 100,
+  },
+  toast: {
+    backgroundColor: "rgba(0,0,0,0.85)",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  toastText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  toastPoints: {
+    color: "#A5B4FC",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  settingsButtonInputRow: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  settingsButtonText: {
+    fontSize: 22,
+  },
+  themeBadgeDot: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#FF3A3A",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#1A1330",
+  },
+  themeBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  sparkle: { position: "absolute" },
 });
