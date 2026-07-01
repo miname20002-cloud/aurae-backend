@@ -92,20 +92,29 @@ def request_verification_code(email: str):
     """
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email format.")
-        
+
+    # Google Play 심사 계정: OTP 발송 없이 자동 인증 완료 처리
+    if email == auth.REVIEWER_EMAIL:
+        email_verification_store[email] = {
+            "code": "000000",
+            "expires_at": datetime.utcnow() + timedelta(hours=24),
+            "verified": True,
+        }
+        return {"message": "Verification code sent. Please check your inbox."}
+
     code = f"{random.randint(100000, 999999)}"
     expires_at = datetime.utcnow() + timedelta(minutes=5)
-    
+
     email_verification_store[email] = {
         "code": code,
         "expires_at": expires_at,
         "verified": False
     }
-    
+
     success = send_verification_email(email, code)
     if not success and os.environ.get("SMTP_USER"):
         raise HTTPException(status_code=500, detail="Failed to send verification email.")
-        
+
     return {"message": "Verification code sent. Please check your inbox."}
 
 @app.post("/auth/verify-code", status_code=status.HTTP_200_OK)
@@ -113,17 +122,21 @@ def verify_code(email: str, code: str):
     """
     [Endpoint 2] Triggered when the user submits the 6-digit code for verification.
     """
+    # Google Play 심사 계정: 코드 검증 없이 항상 성공
+    if email == auth.REVIEWER_EMAIL:
+        return {"message": "Email verification completed successfully.", "verified": True}
+
     record = email_verification_store.get(email)
-    
+
     if not record:
         raise HTTPException(status_code=400, detail="No verification request found for this email.")
-        
+
     if datetime.utcnow() > record["expires_at"]:
         raise HTTPException(status_code=400, detail="The verification code has expired. Please request a new one.")
-        
+
     if record["code"] != code:
         raise HTTPException(status_code=400, detail="Incorrect verification code.")
-        
+
     record["verified"] = True
     return {"message": "Email verification completed successfully.", "verified": True}
 def get_real_ip(request: Request) -> str:
@@ -287,6 +300,11 @@ class RefreshRequest(BaseModel):
     user_id: int
     refresh_token: str
     device_id: str
+
+
+class ReviewerLoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 class PushTokenRequest(BaseModel):
@@ -811,6 +829,43 @@ def refresh_token_endpoint(req: RefreshRequest, request: Request, session=Depend
 
     new_access_token = auth.create_access_token(user.id)
     return {"access_token": new_access_token, "refresh_token": new_refresh_token}
+
+
+@app.post("/auth/reviewer-login", include_in_schema=False)
+def reviewer_login(req: ReviewerLoginRequest, session=Depends(get_db)):
+    """
+    Google Play 심사용 전용 로그인. 고정 테스트 계정을 find-or-create하고
+    바로 토큰을 발급한다. OTP 플로우를 완전히 우회하므로 리뷰어가 이메일을
+    확인하지 않아도 된다. API 문서(OpenAPI)에서는 노출되지 않는다.
+    """
+    if req.email != auth.REVIEWER_EMAIL or req.password != auth.REVIEWER_PASSWORD:
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+
+    user = session.query(User).filter(User.device_id == auth.REVIEWER_DEVICE_ID).first()
+    if not user:
+        user = User(
+            name="Reviewer",
+            age_verified=True,
+            companion_id="chloe",
+            tier="premium",
+            device_id=auth.REVIEWER_DEVICE_ID,
+        )
+        session.add(user)
+        session.flush()
+        session.add(UserInsightProfile(user_id=user.id))
+
+    refresh_token = auth.generate_refresh_token()
+    user.refresh_token_hash = auth.hash_refresh_token(refresh_token)
+    user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=auth.REFRESH_TOKEN_TTL_DAYS)
+    session.commit()
+
+    access_token = auth.create_access_token(user.id)
+    return {
+        "user_id": user.id,
+        "companion": PERSONAS[user.companion_id]["name"],
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
 
 
 @app.post("/push-token")

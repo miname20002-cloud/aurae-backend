@@ -21,6 +21,11 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL_MINUTES = 120
 REFRESH_TOKEN_TTL_DAYS = 30
 
+# Google Play 심사용 테스트 계정 - OTP 없이 바로 로그인 허용
+REVIEWER_EMAIL = "google-review@aurae-test.com"
+REVIEWER_PASSWORD = "AuraeReview2026!"
+REVIEWER_DEVICE_ID = "google-play-reviewer-fixed-device"
+
 security_scheme = HTTPBearer()
 
 
