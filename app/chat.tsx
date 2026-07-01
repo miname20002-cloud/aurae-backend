@@ -42,13 +42,11 @@ import { Fredoka_600SemiBold, Fredoka_700Bold } from "@expo-google-fonts/fredoka
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Screen from "@/components/Screen";
 import { colors, spacing, radius } from "@/theme/colors";
-// 🔍 Ctrl + F 검색 키워드: colors, spacing, radius 
-// 📍 발견한 import문 바로 아랫줄에 아래 코드를 추가하세요.
-// 🔍 Ctrl + F 검색 키워드: colors, spacing, radius 
-// 📍 발견한 import문 바로 아랫줄에 이 코드를 추가하세요.
+import { chat as sendChat, getChatHistory, getGreeting, assetUrl, getRewardsState, getThemes, setChatTheme, sendShare, watchAdBonus, registerPushToken, type ThemeInfo, type BonusInfo } from "@/lib/api";
+import { companionByName } from "@/lib/companions";
+import { getSession } from "@/lib/session";
+import { SystemBars } from "react-native-edge-to-edge";
 
-// 📍 47번째 줄 ~ 196번째 줄 기존 gaugeStyles 파편을 지우고 이 코드로 완벽 교체하세요.
-// 📍 9번째 줄 ~ 166번째 줄 영역을 날린 뒤 이 코드를 붙여넣으세요.
 const gaugeStyles = {
   statsBox: {
     flexDirection: 'column' as const,
@@ -61,7 +59,7 @@ const gaugeStyles = {
     alignItems: 'center' as const,
     justifyContent: 'flex-start' as const,
     height: 14,
-    width: '100%',
+    width: 175,
     maxWidth: 175,
   },
   statLabel: {
@@ -81,7 +79,7 @@ const gaugeStyles = {
     justifyContent: 'center' as const,
   },
   barFill: {
-    height: '100%',
+    height: '100%' as const,
     position: 'absolute' as const,
     left: 0,
     top: 0,
@@ -103,8 +101,8 @@ const gaugeStyles = {
   },
   pinsLayer: {
     position: 'absolute' as const,
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
     left: 0,
     top: 0,
     flexDirection: 'row' as const,
@@ -143,21 +141,6 @@ const gaugeStyles = {
     textShadowRadius: 4,
   },
 };
-import { chat as sendChat, getChatHistory, getGreeting } from "@/lib/api";
-import { assetUrl } from "@/lib/api";
-import {
-  getRewardsState,
-  getThemes,
-  setChatTheme,
-  sendShare,
-  watchAdBonus,
-  registerPushToken,
-  type ThemeInfo,
-  type BonusInfo,
-} from "@/lib/api";
-import { companionByName } from "@/lib/companions";
-import { getSession } from "@/lib/session";
-import { SystemBars } from "react-native-edge-to-edge";
 
 type Message = {
   id: string;
@@ -170,38 +153,23 @@ const IDLE_EMOTIONS = ["smile", "think", "wink", "neutral", "joy"];
 const IDLE_SWITCH_MS = 7500;
 const REACTION_HOLD_MS = 7500;
 const TOAST_HOLD_MS = 4000;
-
 const MILESTONE_TOAST_HOLD_MS = 5000;
 const LEVEL_UP_TOAST_HOLD_MS = 5000;
 const THEME_UNLOCK_SEEN_KEY = "aurae_seen_theme_unlock_streak";
 const USER_PHOTO_KEY = "aurae_user_photo_uri";
 const COACH_MARKS_SEEN_KEY = "aurae_seen_coach_marks";
 
-// ⚠️ 항상 테스트 광고단위로 고정해둔다. __DEV__로 분기하면 EAS preview
-// 빌드(지금 테스트 중인 그 빌드)에서는 false가 돼서 진짜 광고단위가
-// 활성화되는데, 본인이 직접 눌러서 테스트하면 AdMob 자기클릭(self-click)
-// 정책 위반으로 계정이 정지될 수 있다.
-//
-// Play Store에 정식 공개 직전에만 아래 줄을 실제 광고단위ID로 바꾸거나,
-// 더 안전하게는 본인 테스트폰을 AdMob 테스트기기로 등록해서(설정 -> 광고
-// SDK requestConfiguration의 testDeviceIdentifiers) 진짜 ID를 쓰면서도
-// 항상 테스트광고만 받게 하는 방법을 추천한다.
-const AD_BONUS_UNIT_ID = TestIds.REWARDED; // TODO: 정식 출시 직전에만 "ca-app-pub-9861327921813724/2624188129"로 교체
+const AD_BONUS_UNIT_ID = TestIds.REWARDED;
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
-
-const INTRO_VIDEO_DURATION_MS = 10300; // intro clips are authored at exactly 10s; small buffer added
+const INTRO_VIDEO_DURATION_MS = 10300;
 const SPARKLE_LINGER_MS = 400;
-
-// how long the sparkle burst is visible over the full-screen video before it's swapped out for the chat UI
 const INTRO_FADE_OUT_MS = 600;
-// smooth fade duration as the intro overlay dissolves into the revealed chat UI
 
 function emotionClipPath(companionId: string, emotion: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
   return `assets/${cap}_Assets/${cap}_${emotion}.mp4`;
 }
 
-// source: 62-63
 function introClipPath(companionId: string): string {
   const cap = companionId.charAt(0).toUpperCase() + companionId.slice(1);
   return `assets/${cap}_Assets/${cap}_intro.mp4`;
@@ -245,7 +213,6 @@ function complementaryColor(hex: string): string {
     else h = (r - g) / d + 4;
     h /= 6;
   }
-
   h = (h + 0.5) % 1;
 
   function hue2rgb(p: number, q: number, t: number) {
@@ -267,7 +234,6 @@ function complementaryColor(hex: string): string {
     g2 = hue2rgb(p, q, h);
     b2 = hue2rgb(p, q, h - 1 / 3);
   }
-
   const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
   return `#${toHex(r2)}${toHex(g2)}${toHex(b2)}`;
 }
@@ -286,19 +252,7 @@ const SPARKLE_COLORS = ["#FFD76B", "#FF8FAB", "#8CD9FF", "#FFE9B0"];
 const SPARKLE_COUNT = 8;
 const SPARKLE_RADIUS = 64;
 
-function Sparkle({
-  progress,
-  angle,
-  color,
-  radius = SPARKLE_RADIUS,
-  size = 8,
-}: {
-  progress: SharedValue<number>;
-  angle: number;
-  color: string;
-  radius?: number;
-  size?: number;
-}) {
+function Sparkle({ progress, angle, color, radius = SPARKLE_RADIUS, size = 8 }: { progress: SharedValue<number>; angle: number; color: string; radius?: number; size?: number; }) {
   const animatedStyle = useAnimatedStyle(() => {
     const p = progress.value;
     const dist = p * radius;
@@ -331,54 +285,10 @@ function Sparkle({
   );
 }
 
-// source: 92-93
-function Gauge({
-  icon,
-  color,
-  segments,
-  filled,
-  label,
-}: {
-  icon: string;
-  color: string;
-  segments: number;
-  filled: number;
-  label: string;
-}) {
-  const safeSegments = Math.max(1, Math.round(segments));
-  const safeFilled = Math.max(0, Math.min(safeSegments, Math.round(filled)));
-  return (
-    <View style={styles.gaugeRow}>
-      <View style={[styles.gaugeBadge, { backgroundColor: color }]}>
-        <Text style={styles.gaugeBadgeIcon}>{icon}</Text>
-      </View>
-      <View style={styles.gaugeTrack}>
-        {Array.from({ length: safeSegments }, (_, i) => {
-          const isFilled = i < safeFilled;
-          const isLastFilled = isFilled && i === safeFilled - 1;
-          return (
-            <View
-              key={i}
-              style={[
-                styles.gaugeSegment,
-                isFilled && { backgroundColor: color },
-                isLastFilled && [styles.gaugeSegmentGlow, { shadowColor: color }],
-              ]}
-            />
-          );
-        })}
-      </View>
-      <Text style={styles.gaugeLabel} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 function coachBubbleBodyPath(w: number, h: number): string {
-  const spikes = 11; // 둘레를 따라 도는 뾰족 칼날 개수
-  const spikeDepth = 16; // 칼날이 바깥으로 튀어나오는 깊이
-  const valleyDepth = 10; // 칼날 사이가 안으로 들어가는 깊이
+  const spikes = 11;
+  const spikeDepth = 16;
+  const valleyDepth = 10;
   const sideLengths = [w, h, w, h];
   const perimeter = 2 * (w + h);
 
@@ -418,11 +328,7 @@ function coachBubbleTailShapePath(w: number, h: number, side: "top" | "bottom", 
 }
 
 export default function ChatScreen() {
-  const { companion: companionName } = useLocalSearchParams<{
-    userId: string;
-    companion: string;
-  }>();
-
+  const { companion: companionName } = useLocalSearchParams<{ userId: string; companion: string; }>();
   const companion = companionByName(companionName ?? "") ?? null;
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -442,9 +348,8 @@ export default function ChatScreen() {
   const [initializing, setInitializing] = useState(true);
   const [showIntroOverlay, setShowIntroOverlay] = useState(false);
   const [showFullscreenClip, setShowFullscreenClip] = useState(false);
-  const fullscreenPlayer = useVideoPlayer(null, (p) => {
-    p.loop = false;
-  });
+  
+  const fullscreenPlayer = useVideoPlayer(null, (p) => { p.loop = false; });
   const nextId = useRef(0);
   const greetingTried = useRef(false);
   const listRef = useRef<FlatList>(null);
@@ -476,6 +381,7 @@ export default function ChatScreen() {
   const [coachTarget, setCoachTarget] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [bubbleContentSize, setBubbleContentSize] = useState({ width: 0, height: 0 });
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  
   const avatarWrapRef = useRef<View>(null);
   const gaugeStackRef = useRef<View>(null);
   const inputRowRef = useRef<View>(null);
@@ -483,14 +389,10 @@ export default function ChatScreen() {
   const settingsButtonRef = useRef<View>(null);
   const firstBubbleRef = useRef<View>(null);
 
-  // ⭐️ 요청하신 위치에 키보드 리스너 useEffect 결합 완료
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
     const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
   const [fontsLoaded] = useFonts({ Fredoka_600SemiBold, Fredoka_700Bold });
@@ -532,15 +434,10 @@ export default function ChatScreen() {
 
   function startCoachMarksIfFirstTime() {
     AsyncStorage.getItem(COACH_MARKS_SEEN_KEY)
-      .then((seen) => {
-        if (!seen) {
-          setTimeout(() => setCoachStep(1), 400);
-        }
-      })
+      .then((seen) => { if (!seen) setTimeout(() => setCoachStep(1), 400); })
       .catch(() => {});
   }
 
-  // source: 136-137
   function dismissCoachMarks() {
     setCoachStep(0);
     setCoachTarget(null);
@@ -565,6 +462,7 @@ export default function ChatScreen() {
   const bgColor = activeTheme?.bg ?? colors.background;
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
   const userGlowColor = complementaryColor(companion?.accent ?? "#7C8CFF");
+  
   const coachSteps = [
     { text: "tap me anytime to replay my intro 🎬", color: companion?.accent ?? "#8B7CF6" },
     { text: "💗 relationship & 🔥 streak — keep these glowing every day", color: "#FF8FAB" },
@@ -576,23 +474,16 @@ export default function ChatScreen() {
 
   const breath = useSharedValue(0.4);
   useEffect(() => {
-    breath.value = withRepeat(
-      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    );
+    breath.value = withRepeat(withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }), -1, true);
   }, []);
-  const animatedGlowStyle = useAnimatedStyle(() => ({
-    opacity: breath.value,
-  }));
 
+  const animatedGlowStyle = useAnimatedStyle(() => ({ opacity: breath.value }));
   const introFlashOpacity = useSharedValue(0);
   const introFlashScale = useSharedValue(0.4);
   const sparkleProgress = useSharedValue(0);
   const introOverlayOpacity = useSharedValue(0);
-  const introOverlayAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: introOverlayOpacity.value,
-  }));
+  
+  const introOverlayAnimatedStyle = useAnimatedStyle(() => ({ opacity: introOverlayOpacity.value }));
   const introFlashStyle = useAnimatedStyle(() => ({
     opacity: introFlashOpacity.value,
     transform: [{ scale: introFlashScale.value }],
@@ -612,18 +503,13 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (unseenThemeCount > 0) {
-      paletteScale.value = withRepeat(
-        withTiming(1.3, { duration: 500, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true
-      );
+      paletteScale.value = withRepeat(withTiming(1.3, { duration: 500, easing: Easing.inOut(Easing.ease) }), -1, true);
     } else {
       paletteScale.value = withTiming(1, { duration: 200 });
     }
   }, [unseenThemeCount]);
-  const paletteAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: paletteScale.value }],
-  }));
+
+  const paletteAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: paletteScale.value }] }));
 
   useEffect(() => {
     (async () => {
@@ -639,21 +525,15 @@ export default function ChatScreen() {
       try {
         const { status } = await Notifications.getPermissionsAsync();
         if (status !== "granted") return;
-
         const tokenData = await Notifications.getExpoPushTokenAsync();
         await registerPushToken(tokenData.data);
-      } catch {
-        // 시뮬레이터/iOS Expo Go 등에서 실패해도 무시
-      }
+      } catch {}
     })();
   }, []);
 
   useEffect(() => {
     const ad = rewardedAdRef.current;
-
-    const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      setAdReady(true);
-    });
+    const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => { setAdReady(true); });
     const unsubEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, async () => {
       try {
         await watchAdBonus();
@@ -674,13 +554,7 @@ export default function ChatScreen() {
     });
 
     ad.load();
-
-    return () => {
-      unsubLoaded();
-      unsubEarned();
-      unsubClosed();
-      unsubError();
-    };
+    return () => { unsubLoaded(); unsubEarned(); unsubClosed(); unsubError(); };
   }, []);
 
   async function handlePickUserPhoto() {
@@ -716,9 +590,7 @@ export default function ChatScreen() {
         const seenStreak = seenRaw ? parseInt(seenRaw, 10) : 0;
         setSeenThemeStreak(seenStreak);
         setUnseenThemeCount(computeUnseenCount(themeData.themes, seenStreak));
-      } catch {
-        // 리워드 상태 로딩 실패해도 채팅 자체는 막지 않음
-      }
+      } catch {}
     })();
   }, []);
 
@@ -769,32 +641,20 @@ export default function ChatScreen() {
         message: `"${text}"\n\n— ${companion?.name ?? "my Aurae companion"} 💬\n\ntalking to my AI bestie on Aurae`,
       });
       await sendShare("chat_bubble");
-    } catch {
-      // 공유 시트 취소/실패는 조용히 무시
-    }
+    } catch {}
   }
 
-  const playerA = useVideoPlayer(null, (p) => {
-    p.loop = false;
-  });
-  const playerB = useVideoPlayer(null, (p) => {
-    p.loop = false;
-  });
-  const introPlayer = useVideoPlayer(null, (p) => {
-    p.loop = false;
-  });
+  const playerA = useVideoPlayer(null, (p) => { p.loop = false; });
+  const playerB = useVideoPlayer(null, (p) => { p.loop = false; });
+  const introPlayer = useVideoPlayer(null, (p) => { p.loop = false; });
 
   useEffect(() => {
     introPlayer.pause();
     fullscreenPlayer.pause();
   }, []);
 
-  function getActive() {
-    return activeIsA ? playerA : playerB;
-  }
-  function getHidden() {
-    return activeIsA ? playerB : playerA;
-  }
+  function getActive() { return activeIsA ? playerA : playerB; }
+  function getHidden() { return activeIsA ? playerB : playerA; }
 
   useEffect(() => {
     if (!companion) return;
@@ -805,9 +665,7 @@ export default function ChatScreen() {
   }, [companion]);
 
   useEffect(() => {
-    const subscription = fullscreenPlayer.addListener("playToEnd", () => {
-      setShowFullscreenClip(false);
-    });
+    const subscription = fullscreenPlayer.addListener("playToEnd", () => { setShowFullscreenClip(false); });
     return () => subscription.remove();
   }, [fullscreenPlayer]);
 
@@ -844,12 +702,8 @@ export default function ChatScreen() {
           greetingTried.current = true;
           try {
             const { status: permStatus } = await Notifications.getPermissionsAsync();
-            if (permStatus === "undetermined") {
-              await Notifications.requestPermissionsAsync();
-            }
-          } catch {
-            // 시뮬레이터 등 실패해도 인트로는 정상 진행
-          }
+            if (permStatus === "undetermined") await Notifications.requestPermissionsAsync();
+          } catch {}
 
           setShowIntroOverlay(true);
           introOverlayOpacity.value = 1;
@@ -908,7 +762,6 @@ export default function ChatScreen() {
     const timer = setTimeout(() => {
       const nextIdx = (idleIdx + 1) % IDLE_EMOTIONS.length;
       const bufferedIdx = (idleIdx + 2) % IDLE_EMOTIONS.length;
-
       const newActiveIsA = !activeIsA;
       getHidden().play();
       setActiveIsA(newActiveIsA);
@@ -932,9 +785,7 @@ export default function ChatScreen() {
   });
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    const timeout = setTimeout(() => { listRef.current?.scrollToEnd({ animated: true }); }, 100);
     return () => clearTimeout(timeout);
   }, [messages]);
 
@@ -968,16 +819,9 @@ export default function ChatScreen() {
       setReactionPath(result.asset_path);
       setTimeout(() => setReactionPath(null), REACTION_HOLD_MS);
 
-      if (result.limit_reached && result.ad_bonus_eligible) {
-        setAdBonusOffer(true);
-      }
-
-      if (typeof result.relationship_level === "number") {
-        setRelationshipLevel(result.relationship_level);
-      }
-      if (typeof result.relationship_progress_pct === "number") {
-        setRelationshipProgressPct(result.relationship_progress_pct);
-      }
+      if (result.limit_reached && result.ad_bonus_eligible) setAdBonusOffer(true);
+      if (typeof result.relationship_level === "number") setRelationshipLevel(result.relationship_level);
+      if (typeof result.relationship_progress_pct === "number") setRelationshipProgressPct(result.relationship_progress_pct);
       if (result.relationship_level_up) {
         setRelationshipLevelName(result.relationship_level_up.level_name);
         showLevelUpToast(result.relationship_level_up.new_level, result.relationship_level_up.level_name);
@@ -985,13 +829,8 @@ export default function ChatScreen() {
 
       if (result.streak) {
         setCurrentStreak(result.streak.current_streak);
-        if (typeof result.streak.prev_milestone === "number") {
-          setStreakPrevMilestone(result.streak.prev_milestone);
-        }
-        if (result.streak.next_milestone !== undefined) {
-          setStreakNextMilestone(result.streak.next_milestone);
-        }
-
+        if (typeof result.streak.prev_milestone === "number") setStreakPrevMilestone(result.streak.prev_milestone);
+        if (result.streak.next_milestone !== undefined) setStreakNextMilestone(result.streak.next_milestone);
         if (result.streak.milestone_hit) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           try {
@@ -1005,9 +844,7 @@ export default function ChatScreen() {
           }
         }
       }
-      if (result.bonus) {
-        showBonusToast(result.bonus);
-      }
+      if (result.bonus) showBonusToast(result.bonus);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setError(`Message didn't go through. (${detail})`);
@@ -1042,12 +879,7 @@ export default function ChatScreen() {
       />
       {showIntroOverlay && (
         <Animated.View style={[styles.introOverlay, introOverlayAnimatedStyle]}>
-          <VideoView
-            player={introPlayer}
-            style={styles.introOverlayVideo}
-            contentFit="cover"
-            nativeControls={false}
-          />
+          <VideoView player={introPlayer} style={styles.introOverlayVideo} contentFit="cover" nativeControls={false} />
           <Animated.View style={[styles.introOverlayFlash, introFlashStyle]} pointerEvents="none" />
           <View style={styles.introOverlaySparkleLayer} pointerEvents="none">
             {Array.from({ length: SPARKLE_COUNT }, (_, i) => (
@@ -1066,17 +898,9 @@ export default function ChatScreen() {
 
       {showFullscreenClip && (
         <View style={styles.fullscreenClipOverlay}>
-          <VideoView
-            player={fullscreenPlayer}
-            style={styles.fullscreenClipVideo}
-            contentFit="contain"
-            nativeControls={false}
-          />
+          <VideoView player={fullscreenPlayer} style={styles.fullscreenClipVideo} contentFit="contain" nativeControls={false} />
           <Pressable
-            onPress={() => {
-              fullscreenPlayer.pause();
-              setShowFullscreenClip(false);
-            }}
+            onPress={() => { fullscreenPlayer.pause(); setShowFullscreenClip(false); }}
             style={styles.fullscreenClipSkipButton}
             hitSlop={16}
           >
@@ -1089,125 +913,91 @@ export default function ChatScreen() {
         <View style={styles.coachOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={advanceCoachMarks} />
           {coachTarget && (
-          <View
-            style={[
-              styles.coachHighlight,
-              {
-                left: coachTarget.x - 6,
-                top: coachTarget.y - 6 + (coachStep === 6 ? 8 : 0),
-                width: coachTarget.width + 12,
-                height: coachTarget.height + 12,
-                borderRadius:
-                  coachStep === 1 || coachStep === 4 || coachStep === 6 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
-                borderColor: coachSteps[coachStep - 1].color,
-                shadowColor: coachSteps[coachStep - 1].color,
-              },
-            ]}
-            pointerEvents="none"
-          />
+            <View
+              style={[
+                styles.coachHighlight,
+                {
+                  left: coachTarget.x - 6,
+                  top: coachTarget.y - 6 + (coachStep === 6 ? 8 : 0),
+                  width: coachTarget.width + 12,
+                  height: coachTarget.height + 12,
+                  borderRadius: coachStep === 1 || coachStep === 4 || coachStep === 6 ? (Math.max(coachTarget.width, coachTarget.height) + 12) / 2 : 14,
+                  borderColor: coachSteps[coachStep - 1].color,
+                  shadowColor: coachSteps[coachStep - 1].color,
+                },
+              ]}
+              pointerEvents="none"
+            />
           )}
           {coachTarget && (
-          <View
-            style={[
-              styles.coachBubble,
-              coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55
-                ? { top: Math.max(70, coachTarget.y - 140) }
-                : { top: coachTarget.y + coachTarget.height + 24 },
-            ]}
-            pointerEvents="none"
-          >
-            {bubbleContentSize.width > 0 && (
-              <Svg
-                width={bubbleContentSize.width + 24 + 56}
-                height={bubbleContentSize.height + 24 + 56}
-                viewBox={`-28 -28 ${bubbleContentSize.width + 24 + 56} ${bubbleContentSize.height + 24 + 56}`}
-                style={styles.coachBubbleSvg}
-              >
-                <Path
-                  d={coachBubbleTailShapePath(
-                    bubbleContentSize.width + 24,
-                    bubbleContentSize.height + 24,
-                    coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "bottom" : "top",
-                    Math.min(
-                      Math.max(
-                        (bubbleContentSize.width + 24) / 2 + (coachTarget.x + coachTarget.width / 2 - SCREEN_WIDTH / 2),
-                        30
-                      ),
-                      bubbleContentSize.width + 24 - 30
-                    )
-                  )}
-                  fill="#8B7CF6"
-                  stroke="#1A1330"
-                  strokeWidth={6}
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d={coachBubbleBodyPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)}
-                  fill="#8B7CF6"
-                  stroke="#1A1330"
-                  strokeWidth={6}
-                  strokeLinejoin="miter"
-                             />
-              </Svg>
-            )}
             <View
-              onLayout={(e) => {
-                const { width, height } = e.nativeEvent.layout;
-                if (Math.abs(width - bubbleContentSize.width) > 1 || Math.abs(height - bubbleContentSize.height) > 1) {
-                  setBubbleContentSize({ width, height });
-                }
-              }}
-              style={styles.coachBubbleContent}
+              style={[
+                styles.coachBubble,
+                coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? { top: Math.max(70, coachTarget.y - 140) } : { top: coachTarget.y + coachTarget.height + 24 },
+              ]}
+              pointerEvents="none"
             >
-              <Text
-                style={[styles.coachBubbleText, fontsLoaded && { fontFamily: "Fredoka_700Bold" }]}
-              >
-                {coachSteps[coachStep - 1].text}
-              </Text>
-              <View style={styles.coachDots}>
-                {coachSteps.map((step, i) => (
-                  <View
-                    key={i}
-                    style={[styles.coachDot, i === coachStep - 1 && styles.coachDotActive]}
+              {bubbleContentSize.width > 0 && (
+                <Svg
+                  width={bubbleContentSize.width + 24 + 56}
+                  height={bubbleContentSize.height + 24 + 56}
+                  viewBox={`-28 -28 ${bubbleContentSize.width + 24 + 56} ${bubbleContentSize.height + 24 + 56}`}
+                  style={styles.coachBubbleSvg}
+                >
+                  <Path
+                    d={coachBubbleTailShapePath(
+                      bubbleContentSize.width + 24,
+                      bubbleContentSize.height + 24,
+                      coachTarget.y + coachTarget.height / 2 > SCREEN_HEIGHT * 0.55 ? "bottom" : "top",
+                      Math.min(Math.max((bubbleContentSize.width + 24) / 2 + (coachTarget.x + coachTarget.width / 2 - SCREEN_WIDTH / 2), 30), bubbleContentSize.width + 24 - 30)
+                    )}
+                    fill="#8B7CF6"
+                    stroke="#1A1330"
+                    strokeWidth={6}
+                    strokeLinejoin="round"
                   />
-                ))}
+                  <Path d={coachBubbleBodyPath(bubbleContentSize.width + 24, bubbleContentSize.height + 24)} fill="#8B7CF6" stroke="#1A1330" strokeWidth={6} strokeLinejoin="miter" />
+                </Svg>
+              )}
+              <View
+                onLayout={(e) => {
+                  const { width, height } = e.nativeEvent.layout;
+                  if (Math.abs(width - bubbleContentSize.width) > 1 || Math.abs(height - bubbleContentSize.height) > 1) {
+                    setBubbleContentSize({ width, height });
+                  }
+                }}
+                style={styles.coachBubbleContent}
+              >
+                <Text style={[styles.coachBubbleText, fontsLoaded && { fontFamily: "Fredoka_700Bold" }]}>
+                  {coachSteps[coachStep - 1].text}
+                </Text>
+                <View style={styles.coachDots}>
+                  {coachSteps.map((step, i) => <View key={i} style={[styles.coachDot, i === coachStep - 1 && styles.coachDotActive]} />)}
+                </View>
               </View>
             </View>
-          </View>
           )}
           <Pressable onPress={dismissCoachMarks} style={styles.coachSkip} hitSlop={12}>
             <Text style={[styles.coachSkipText, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}>skip</Text>
           </Pressable>
-          <Text
-            style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]}
-            pointerEvents="none"
-          >
+          <Text style={[styles.coachTapHint, fontsLoaded && { fontFamily: "Fredoka_600SemiBold" }]} pointerEvents="none">
             tap anywhere to continue
           </Text>
         </View>
       )}
 
-      <KeyboardAvoidingView
-        style={styles.flexFill}
-        behavior={Platform.OS === "ios" ? "padding" : keyboardVisible ? "height" : undefined}
-        keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
-      >
+      <KeyboardAvoidingView style={styles.flexFill} behavior={Platform.OS === "ios" ? "padding" : keyboardVisible ? "height" : undefined} keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}>
         {(milestoneToast || levelUpToast || bonusToast) && (
           <View style={styles.toastWrap} pointerEvents="none">
             <View style={styles.toast}>
               {milestoneToast ? (
                 <>
-                  <Text style={styles.toastText}>
-                    🎉 Day {milestoneToast.streakDay} streak!
-                    {milestoneToast.themeName ? ` "${milestoneToast.themeName}" theme unlocked` : ""}
-                  </Text>
+                  <Text style={styles.toastText}>🎉 Day {milestoneToast.streakDay} streak!{milestoneToast.themeName ? ` "${milestoneToast.themeName}" theme unlocked` : ""}</Text>
                   <Text style={styles.toastPoints}>tap 🎨 to try it</Text>
                 </>
               ) : levelUpToast ? (
                 <>
-                  <Text style={styles.toastText}>
-                    💗 Level up! Lv.{levelUpToast.newLevel} — {levelUpToast.levelName}
-                  </Text>
+                  <Text style={styles.toastText}>💗 Level up! Lv.{levelUpToast.newLevel} — {levelUpToast.levelName}</Text>
                   <Text style={styles.toastPoints}>{companion?.name ?? "they"} feel closer to you now</Text>
                 </>
               ) : bonusToast ? (
@@ -1247,71 +1037,75 @@ export default function ChatScreen() {
                   }}
                   style={styles.avatarWrap}
                 >
-                  {companion?.facePath && (
-                    <Image
-                      source={{ uri: assetUrl(companion.facePath) }}
-                      style={styles.avatarMedia}
-                      resizeMode="cover"
-                    />
-                  )}
-                  <VideoView
-                    key={`a-${resumeKey}`}
-                    player={playerA}
-                    style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]}
-                    contentFit="cover"
-                    nativeControls={false}
-                  />
-                  <VideoView
-                    key={`b-${resumeKey}`}
-                    player={playerB}
-                    style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]}
-                    contentFit="cover"
-                    nativeControls={false}
-                  />
+                  {companion?.facePath && <Image source={{ uri: assetUrl(companion.facePath) }} style={styles.avatarMedia} resizeMode="cover" />}
+                  <VideoView key={`a-${resumeKey}`} player={playerA} style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 1 : 0 }]} contentFit="cover" nativeControls={false} />
+                  <VideoView key={`b-${resumeKey}`} player={playerB} style={[styles.avatarMedia, StyleSheet.absoluteFill, { opacity: activeIsA ? 0 : 1 }]} contentFit="cover" nativeControls={false} />
                   <Svg style={StyleSheet.absoluteFill} viewBox="0 0 72 72">
                     <Defs>
                       <Mask id="avatarCircleMask">
-                        <Rect x="0" y="0" width="72" height="72" fill="white" />
+                        <Rect x="0" y="0" width={72} height="72" fill="white" />
                         <Circle cx="36" cy="36" r="34" fill="black" />
                       </Mask>
                     </Defs>
-                    <Rect
-                      x="0"
-                      y="0"
-                      width="72"
-                      height="72"
-                      fill={colors.background}
-                      mask="url(#avatarCircleMask)"
-                    />
+                    <Rect x="0" y="0" width="72" height="72" fill={colors.background} mask="url(#avatarCircleMask)" />
                   </Svg>
                 </Pressable>
               </View>
-              <Text
-                style={[styles.sideName, { color: companion?.accent ?? colors.textPrimary }]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
+              <Text style={[styles.sideName, { color: companion?.accent ?? colors.textPrimary }]} numberOfLines={1} ellipsizeMode="tail">
                 {companion?.name ?? companionName ?? "Friend"}
               </Text>
             </View>
 
             <View style={styles.headerCenter}>
-              <View style={styles.centerRow}>
-                <View style={styles.gaugeStack} ref={gaugeStackRef}>
-                  <Gauge
-                    icon="♥"
-                    color="#FF8FAB"
-                    segments={3}
-                    filled={Math.round((relationshipProgressPct / 100) * 3)}
-                    label={`Lv.${relationshipLevel}`}
-                  />
-                  <Gauge
-                    icon="🔥"
-                    color="#FFB84D"
-                    segments={streakNextMilestone != null ? streakNextMilestone - streakPrevMilestone : 1}
-                    filled={streakNextMilestone != null ? currentStreak - streakPrevMilestone : 1}
-                    label={`${currentStreak}`}
-                  />
+              <View style={styles.centerRow} ref={gaugeStackRef}>
+                <View style={gaugeStyles.statsBox}>
+                  
+                  <View style={gaugeStyles.statRow}>
+                    <Text style={gaugeStyles.statLabel}>LVL {relationshipLevel}</Text>
+                    <View style={gaugeStyles.singleBarTrack}>
+                      <View style={[gaugeStyles.barFill, gaugeStyles.lvlFill, { width: `${relationshipProgressPct}%` as any }]} />
+                      <View style={gaugeStyles.pinsLayer}>
+                        {[0, 25, 50, 75, 100].map((pos, idx) => {
+                          const isActive = relationshipProgressPct >= pos;
+                          const isGatePin = idx === 3 && relationshipProgressPct === 75;
+                          return (
+                            <View 
+                              key={idx} 
+                              style={[
+                                gaugeStyles.pin, 
+                                isActive && gaugeStyles.pinActive,
+                                isGatePin && gaugeStyles.pinGateGlow
+                              ]} 
+                            />
+                          );
+                        })}
+                      </View>
+                    </View>
+                    <Text style={[gaugeStyles.statValue, { opacity: 0, marginLeft: 8 }]}>0</Text>
+                  </View>
+
+                  <View style={gaugeStyles.statRow}>
+                    <Text style={gaugeStyles.statLabel}>STRK</Text>
+                    <View style={gaugeStyles.singleBarTrack}>
+                      <View style={[gaugeStyles.barFill, gaugeStyles.strkFill, { width: `${(currentStreak / 5) * 100}%` as any }]} />
+                      <View style={gaugeStyles.pinsLayer}>
+                        {[0, 25, 50, 75, 100].map((pos, idx) => {
+                          const isActive = ((currentStreak / 5) * 100) >= pos;
+                          return (
+                            <View 
+                              key={idx} 
+                              style={[
+                                gaugeStyles.pin, 
+                                isActive && gaugeStyles.pinActive
+                              ]} 
+                            />
+                          );
+                        })}
+                      </View>
+                    </View>
+                    <Text style={gaugeStyles.statValue}>{currentStreak}</Text>
+                  </View>
+
                 </View>
               </View>
             </View>
@@ -1331,23 +1125,11 @@ export default function ChatScreen() {
                   </Svg>
                 </Animated.View>
                 <View style={styles.userAvatarCircle}>
-                  {userPhotoUri ? (
-                    <Image source={{ uri: userPhotoUri }} style={styles.userAvatarImage} />
-                  ) : (
-                    <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>
-                  )}
+                  {userPhotoUri ? <Image source={{ uri: userPhotoUri }} style={styles.userAvatarImage} /> : <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>}
                 </View>
-                {!userPhotoUri && (
-                  <View style={styles.userPhotoHint}>
-                    <Text style={styles.userPhotoHintText}>📷</Text>
-                  </View>
-                )}
+                {!userPhotoUri && <View style={styles.userPhotoHint}><Text style={styles.userPhotoHintText}>📷</Text></View>}
               </Pressable>
-              {userName && (
-                <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">
-                  {userName}
-                </Text>
-              )}
+              {userName && <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">{userName}</Text>}
             </View>
           </View>
         )}
@@ -1364,84 +1146,43 @@ export default function ChatScreen() {
               onLongPress={() => handleShareBubble(item.text)}
               style={[
                 styles.bubble,
-                item.role === "user"
-                  ? [
-                      styles.bubbleUser,
-                      companion?.accent && { backgroundColor: hexToRgba(companion.accent, 0.22) },
-                    ]
-                  : [styles.bubbleAssistant, { backgroundColor: assistantBubbleColor }],
-                item.isProactive && [
-                  styles.bubbleProactive,
-                  { borderColor: companion?.accent ?? colors.accent, shadowColor: companion?.accent ?? colors.accent },
-                ],
+                item.role === "user" ? [styles.bubbleUser, companion?.accent && { backgroundColor: hexToRgba(companion.accent, 0.22) }] : [styles.bubbleAssistant, { backgroundColor: assistantBubbleColor }],
+                item.isProactive && [styles.bubbleProactive, { borderColor: companion?.accent ?? colors.accent, shadowColor: companion?.accent ?? colors.accent }],
               ]}
             >
-              <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>
-                {item.text}
-              </Text>
+              <Text style={item.role === "user" ? styles.bubbleTextUser : styles.bubbleTextAssistant}>{item.text}</Text>
             </Pressable>
           )}
           ListEmptyComponent={
             initializing ? (
               <Animated.View style={[styles.typingBubble, animatedGlowStyle]}>
-                <Text style={styles.typingText}>
-                  {companion?.name ?? "Chloe"} is typing...
-                </Text>
+                <Text style={styles.typingText}>{companion?.name ?? "Chloe"} is typing...</Text>
               </Animated.View>
-            ) : (
-              <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
-            )
+            ) : <Text style={styles.emptyState}>Say hey to start the conversation.</Text>
           }
         />
 
         {error && <Text style={styles.error}>{error}</Text>}
 
         {adBonusOffer && (
-          <Pressable
-            onPress={handleWatchAdBonus}
-            disabled={watchingAd || !adReady}
-            style={({ pressed }) => [
-              styles.adBonusButton,
-              (!adReady || watchingAd) && styles.adBonusButtonDisabled,
-              pressed && adReady && styles.adBonusButtonPressed,
-            ]}
-          >
-            {watchingAd ? (
-              <ActivityIndicator color={colors.background} />
-            ) : (
-              <Text style={styles.adBonusButtonText}>
-                {adReady ? "📺 Watch an ad for +3 messages" : "Loading ad..."}
-              </Text>
-            )}
+          <Pressable onPress={handleWatchAdBonus} disabled={watchingAd || !adReady} style={({ pressed }) => [styles.adBonusButton, (!adReady || watchingAd) && styles.adBonusButtonDisabled, pressed && adReady && styles.adBonusButtonPressed]}>
+            {watchingAd ? <ActivityIndicator color={colors.background} /> : <Text style={styles.adBonusButtonText}>{adReady ? "📺 Watch an ad for +3 messages" : "Loading ad..."}</Text>}
           </Pressable>
         )}
 
-        <View
-          style={[
-            styles.inputRow,
-            { paddingBottom: keyboardVisible ? spacing.sm : Math.max(spacing.sm, insets.bottom) },
-          ]}
-          ref={inputRowRef}
-        >
+        <View style={[styles.inputRow, { paddingBottom: keyboardVisible ? spacing.sm : Math.max(spacing.sm, insets.bottom) }]} ref={inputRowRef}>
           <Pressable ref={settingsButtonRef} onPress={() => setShowSettingsModal(true)} style={styles.settingsButtonInputRow}>
             <Animated.View style={unseenThemeCount > 0 ? paletteAnimatedStyle : undefined}>
               <Text style={styles.settingsButtonText}>⚙️</Text>
             </Animated.View>
-            {unseenThemeCount > 0 && (
-              <View style={styles.themeBadgeDot}>
-                <Text style={styles.themeBadgeText}>{unseenThemeCount}</Text>
-              </View>
-            )}
+            {unseenThemeCount > 0 && <View style={styles.themeBadgeDot}><Text style={styles.themeBadgeText}>{unseenThemeCount}</Text></View>}
           </Pressable>
           <TextInput
             value={input}
             onChangeText={setInput}
             placeholder={initializing ? "Chloe is getting ready..." : "say something"}
             placeholderTextColor={colors.textTertiary}
-            style={[
-              styles.input,
-              companion?.accent && { borderColor: hexToRgba(companion.accent, 0.5) },
-            ]}
+            style={[styles.input, companion?.accent && { borderColor: hexToRgba(companion.accent, 0.5) }]}
             editable={!sending && !initializing}
             onSubmitEditing={handleSend}
             returnKeyType="send"
@@ -1461,22 +1202,10 @@ export default function ChatScreen() {
           <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Chat Theme</Text>
             {themes.map((theme) => (
-              <Pressable
-                key={theme.id}
-                onPress={() => handleSelectTheme(theme)}
-                style={[
-                  styles.themeRow,
-                  theme.id === activeThemeId && styles.themeRowActive,
-                  !theme.unlocked && styles.themeRowLocked,
-                ]}
-              >
+              <Pressable key={theme.id} onPress={() => handleSelectTheme(theme)} style={[styles.themeRow, theme.id === activeThemeId && styles.themeRowActive, !theme.unlocked && styles.themeRowLocked]}>
                 <View style={[styles.themeSwatch, { backgroundColor: theme.bg }]} />
-                <Text style={[styles.themeRowText, !theme.unlocked && styles.themeRowTextLocked]}>
-                  {theme.name}
-                </Text>
-                {!theme.unlocked && (
-                  <Text style={styles.themeLockNote}>🔒 Day {theme.unlock_streak}</Text>
-                )}
+                <Text style={[styles.themeRowText, !theme.unlocked && styles.themeRowTextLocked]}>{theme.name}</Text>
+                {!theme.unlocked && <Text style={styles.themeLockNote}>🔒 Day {theme.unlock_streak}</Text>}
                 {theme.id === activeThemeId && <Text style={styles.themeCheck}>✓</Text>}
               </Pressable>
             ))}
@@ -1488,13 +1217,7 @@ export default function ChatScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setShowSettingsModal(false)}>
           <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Settings</Text>
-            <Pressable
-              style={styles.settingsRow}
-              onPress={() => {
-                setShowSettingsModal(false);
-                handleOpenThemeModal();
-              }}
-            >
+            <Pressable style={styles.settingsRow} onPress={() => { setShowSettingsModal(false); handleOpenThemeModal(); }}>
               <Text style={styles.settingsRowIcon}>🎨</Text>
               <Text style={styles.settingsRowText}>Chat Theme</Text>
               <Text style={styles.settingsRowChevron}>›</Text>
@@ -1512,580 +1235,81 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  flexFill: {
-    flex: 1,
-  },
-  introOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 200,
-    elevation: 200,
-    backgroundColor: "#000000",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  introOverlayVideo: {
-    width: "100%",
-    height: "100%",
-  },
-  introOverlayFlash: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#FFEFC9",
-  },
-  introOverlaySparkleLayer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fullscreenClipOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 199,
-    elevation: 199,
-    backgroundColor: "#000000",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fullscreenClipVideo: {
-    width: "100%",
-    height: "100%",
-  },
-  fullscreenClipHint: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  fullscreenClipHintText: {
-    color: "#999999",
-    fontSize: 12,
-    fontStyle: "italic",
-  },
-  fullscreenClipSkipButton: {
-    position: "absolute",
-    top: 80,
-    right: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    zIndex: 250,
-  },
-  fullscreenClipSkipText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  coachOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.72)",
-    zIndex: 300,
-  },
-  coachHighlight: {
-    position: "absolute",
-    borderWidth: 3,
-    borderColor: "#FFD76B",
-    shadowColor: "#FFD76B",
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-  },
-  coachBubble: {
-    position: "absolute",
-    left: 24,
-    right: 24,
-    alignItems: "center",
-  },
-  coachBubbleSvg: {
-    position: "absolute",
-    top: -40,
-    left: -40,
-  },
-  coachBubbleContent: {
-    paddingVertical: 20,
-    paddingHorizontal: 22,
-  },
-  coachBubbleText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "800",
-    textAlign: "center",
-    lineHeight: 24,
-    letterSpacing: 0.2,
-  },
-  coachDots: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-    marginTop: 12,
-  },
-  coachDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: "rgba(255,255,255,0.35)",
-  },
-  coachDotActive: {
-    backgroundColor: "#FFFFFF",
-  },
-  coachSkip: {
-    position: "absolute",
-    top: 54,
-    right: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
-  coachSkipText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  coachTapHint: {
-    position: "absolute",
-    bottom: 36,
-    left: 0,
-    right: 0,
-    textAlign: "center",
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 11,
-    fontStyle: "italic",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerSide: {
-    alignItems: "center",
-    width: 104,
-  },
-  sideName: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 4,
-    textAlign: "center",
-    color: colors.textPrimary,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 40,
-  },
-  avatarStack: {
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  glowSvgWrap: {
-    position: "absolute",
-    width: 104,
-    height: 104,
-  },
-  avatarWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    overflow: "hidden",
-    backgroundColor: colors.surface,
-  },
-  avatarMedia: {
-    width: "100%",
-    height: "100%",
-  },
-  introFlash: {
-    position: "absolute",
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: "#FFEFC9",
-  },
-  sparkleLayer: {
-    position: "absolute",
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sparkle: {
-    position: "absolute",
-  },
-  userAvatarStack: {
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userAvatarCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userAvatarInitial: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.textSecondary,
-  },
-  userAvatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 36,
-  },
-  userPhotoHint: {
-    position: "absolute",
-    bottom: 10,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userPhotoHintText: {
-    fontSize: 15,
-  },
-  centerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  gaugeStack: {
-    gap: 10,
-  },
-  gaugeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  gaugeBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: -9,
-    zIndex: 2,
-    borderWidth: 2,
-    borderColor: colors.background,
-  },
-  gaugeBadgeIcon: {
-    fontSize: 14,
-    color: "#1A1014",
-  },
-  gaugeTrack: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingLeft: 17,
-    paddingRight: 7,
-  },
-  gaugeSegment: {
-    width: 10,
-    height: 16,
-    borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  gaugeSegmentGlow: {
-    shadowOpacity: 0.95,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
-  },
-  gaugeLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  settingsButtonInline: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    position: "relative",
-  },
-  settingsButtonInputRow: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    marginRight: 4,
-    position: "relative",
-  },
-  settingsButtonText: {
-    fontSize: 18,
-  },
-  themeBadgeDot: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 3,
-    backgroundColor: "#FF5C5C",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  themeBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  toastWrap: {
-    position: "absolute",
-    top: 162,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 50,
-  },
-  toast: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    maxWidth: "85%",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 184, 77, 0.4)",
-  },
-  toastText: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  toastPoints: {
-    color: "#FFB84D",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  messages: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-    flexGrow: 1,
-  },
-  emptyState: {
-    fontSize: 13,
-    color: colors.textTertiary,
-    textAlign: "center",
-    marginTop: spacing.xl,
-  },
-  typingBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.xl,
-  },
-  typingText: {
-    color: colors.textTertiary,
-    fontSize: 13,
-  },
-  bubble: {
-    maxWidth: "80%",
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-  },
-  bubbleUser: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.accent,
-  },
-  bubbleAssistant: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.surface,
-  },
-  bubbleProactive: {
-    borderWidth: 2,
-    shadowOpacity: 0.65,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
-  bubbleTextUser: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  bubbleTextAssistant: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  error: {
-    fontSize: 12,
-    color: colors.warning,
-    textAlign: "center",
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
-  },
-  adBonusButton: {
-    backgroundColor: colors.accent,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    alignItems: "center",
-  },
-  adBonusButtonPressed: {
-    backgroundColor: colors.accentDark,
-  },
-  adBonusButtonDisabled: {
-    opacity: 0.5,
-  },
-  adBonusButtonText: {
-    color: colors.background,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.textPrimary,
-    backgroundColor: colors.surface,
-    fontSize: 15,
-  },
-  sendButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  sendText: {
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalCard: {
-    width: "85%",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-  },
-  modalTitle: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
-  },
-  themeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  themeRowActive: {
-    opacity: 1,
-  },
-  themeRowLocked: {
-    opacity: 0.45,
-  },
-  themeSwatch: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  themeRowText: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-  themeRowTextLocked: {
-    color: colors.textTertiary,
-  },
-  themeLockNote: {
-    fontSize: 11,
-    color: colors.textTertiary,
-  },
-  themeCheck: {
-    color: colors.accent,
-    fontWeight: "700",
-  },
-  settingsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  settingsRowLast: {
-    borderBottomWidth: 0,
-  },
-  settingsRowIcon: {
-    fontSize: 18,
-  },
-  settingsRowText: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  settingsRowChevron: {
-    color: colors.textTertiary,
-    fontSize: 18,
-  },
+  flexFill: { flex: 1 },
+  introOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, elevation: 200, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" },
+  introOverlayVideo: { width: "100%", height: "100%" },
+  introOverlayFlash: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#FFEFC9" },
+  introOverlaySparkleLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
+  fullscreenClipOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 199, elevation: 199, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" },
+  fullscreenClipVideo: { width: "100%", height: "100%" },
+  fullscreenClipHint: { position: "absolute", bottom: 40, left: 0, right: 0, alignItems: "center" },
+  fullscreenClipHintText: { color: "#999999", fontSize: 12, fontStyle: "italic" },
+  fullscreenClipSkipButton: { position: "absolute", top: 80, right: 20, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.55)", zIndex: 250 },
+  fullscreenClipSkipText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  coachOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.72)", zIndex: 300 },
+  coachHighlight: { position: "absolute", borderWidth: 3, borderColor: "#FFD76B", shadowColor: "#FFD76B", shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 10 },
+  coachBubble: { position: "absolute", left: 24, right: 24, alignItems: "center" },
+  coachBubbleSvg: { position: "absolute", top: -40, left: -40 },
+  coachBubbleContent: { paddingVertical: 20, paddingHorizontal: 22 },
+  coachBubbleText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800", textAlign: "center", lineHeight: 24, letterSpacing: 0.2 },
+  coachDots: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 12 },
+  coachDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: "rgba(255,255,255,0.35)" },
+  coachDotActive: { backgroundColor: "#FFFFFF" },
+  coachSkip: { position: "absolute", top: 54, right: 20, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.15)" },
+  coachSkipText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  coachTapHint: { position: "absolute", bottom: 36, left: 0, right: 0, textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 11, fontStyle: "italic" },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: spacing.sm, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerSide: { alignItems: "center", width: 104 },
+  sideName: { fontSize: 12, fontWeight: "700", marginTop: 4, textAlign: "center", color: colors.textPrimary },
+  headerCenter: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 40 },
+  avatarStack: { width: 104, height: 104, alignItems: "center", justifyContent: "center" },
+  glowSvgWrap: { position: "absolute", width: 104, height: 104 },
+  avatarWrap: { width: 72, height: 72, borderRadius: 36, overflow: "hidden", backgroundColor: colors.surface },
+  avatarMedia: { width: "100%", height: "100%" },
+  introFlash: { position: "absolute", width: 104, height: 104, borderRadius: 52, backgroundColor: "#FFEFC9" },
+  sparkleLayer: { position: "absolute", width: 104, height: 104, alignItems: "center", justifyContent: "center" },
+  sparkle: { position: "absolute" },
+  userAvatarStack: { width: 104, height: 104, alignItems: "center", justifyContent: "center" },
+  userAvatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  userAvatarInitial: { fontSize: 22, fontWeight: "700", color: colors.textSecondary },
+  userAvatarImage: { width: "100%", height: "100%", borderRadius: 36 },
+  userPhotoHint: { position: "absolute", bottom: 10, right: 6, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  userPhotoHintText: { fontSize: 15 },
+  centerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  messages: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm, flexGrow: 1 },
+  emptyState: { fontSize: 13, color: colors.textTertiary, textAlign: "center", marginTop: spacing.xl },
+  typingBubble: { alignSelf: "flex-start", backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.xl },
+  typingText: { color: colors.textTertiary, fontSize: 13 },
+  bubble: { maxWidth: "80%", paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md },
+  bubbleUser: { alignSelf: "flex-end", backgroundColor: colors.accent },
+  bubbleAssistant: { alignSelf: "flex-start", backgroundColor: colors.surface },
+  bubbleProactive: { borderWidth: 2, shadowOpacity: 0.65, shadowRadius: 6, shadowOffset: { width: 0, height: 0 }, elevation: 4 },
+  bubbleTextUser: { color: colors.textPrimary, fontSize: 15, lineHeight: 21 },
+  bubbleTextAssistant: { color: colors.textPrimary, fontSize: 15, lineHeight: 21 },
+  error: { fontSize: 12, color: colors.warning, textAlign: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  adBonusButton: { backgroundColor: colors.accent, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingVertical: spacing.sm, borderRadius: radius.pill, alignItems: "center" },
+  adBonusButtonPressed: { backgroundColor: colors.accentDark },
+  adBonusButtonDisabled: { opacity: 0.5 },
+  adBonusButtonText: { color: colors.background, fontSize: 14, fontWeight: "700" },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  input: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.textPrimary, backgroundColor: colors.surface, fontSize: 15 },
+  sendButton: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  sendText: { fontWeight: "700" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center" },
+  modalCard: { width: "85%", backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg },
+  modalTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: "700", marginBottom: spacing.sm },
+  themeRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  themeRowActive: { opacity: 1 },
+  themeRowLocked: { opacity: 0.45 },
+  themeSwatch: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  themeRowText: { flex: 1, color: colors.textPrimary, fontSize: 14 },
+  themeRowTextLocked: { color: colors.textTertiary },
+  themeLockNote: { fontSize: 11, color: colors.textTertiary },
+  themeCheck: { color: colors.accent, fontWeight: "700" },
+  settingsRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  settingsRowLast: { borderBottomWidth: 0 },
+  settingsRowIcon: { fontSize: 18 },
+  settingsRowText: { flex: 1, color: colors.textPrimary, fontSize: 15, fontWeight: "600" },
+  settingsRowChevron: { color: colors.textTertiary, fontSize: 18 },
 });
