@@ -60,8 +60,8 @@ const gaugeStyles = {
     alignItems: 'center' as const,
     justifyContent: 'flex-start' as const,
     height: 14,
-    width: 175,
-    maxWidth: 175,
+    width: 130,
+    maxWidth: 130,
   },
   statLabel: {
     fontSize: 9,
@@ -72,7 +72,7 @@ const gaugeStyles = {
     width: 38,
   },
   singleBarTrack: {
-    width: 110,
+    width: 78,
     height: 5,
     backgroundColor: '#17171E',
     borderRadius: 3,
@@ -204,7 +204,6 @@ function complementaryColor(hex: string): string {
   let h = 0;
   let s = 0;
   const l = (max + min) / 2;
-
   if (max !== min) {
     const d = max - min;
     s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -214,7 +213,6 @@ function complementaryColor(hex: string): string {
     h /= 6;
   }
   h = (h + 0.5) % 1;
-
   function hue2rgb(p: number, q: number, t: number) {
     if (t < 0) t += 1;
     if (t > 1) t -= 1;
@@ -223,7 +221,48 @@ function complementaryColor(hex: string): string {
     if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
     return p;
   }
+  let r2: number, g2: number, b2: number;
+  if (s === 0) {
+    r2 = g2 = b2 = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r2 = hue2rgb(p, q, h + 1 / 3);
+    g2 = hue2rgb(p, q, h);
+    b2 = hue2rgb(p, q, h - 1 / 3);
+  }
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r2)}${toHex(g2)}${toHex(b2)}`;
+}
 
+function levelShiftedComplementaryColor(hex: string, level: number): string {
+  const sanitized = hex.replace("#", "");
+  const r = parseInt(sanitized.substring(0, 2), 16) / 255;
+  const g = parseInt(sanitized.substring(2, 4), 16) / 255;
+  const b = parseInt(sanitized.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  const levelShift = ((level - 1) * 30) / 360;
+  h = (h + 0.5 + levelShift) % 1;
+  function hue2rgb(p: number, q: number, t: number) {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  }
   let r2: number, g2: number, b2: number;
   if (s === 0) {
     r2 = g2 = b2 = l;
@@ -467,7 +506,7 @@ export default function ChatScreen() {
   const activeTheme = themes.find((t) => t.id === activeThemeId);
   const bgColor = activeTheme?.bg ?? colors.background;
   const assistantBubbleColor = activeTheme?.bubble_assistant ?? colors.surface;
-  const userGlowColor = complementaryColor(companion?.accent ?? "#7C8CFF");
+  const userGlowColor = levelShiftedComplementaryColor(companion?.accent ?? "#7C8CFF", relationshipLevel);
   
   const coachSteps = [
     { text: "tap me anytime to replay my intro 🎬", color: companion?.accent ?? "#8B7CF6" },
@@ -1146,12 +1185,12 @@ useEffect(() => {
                     <Circle cx="52" cy="52" r="52" fill="url(#userGlowGradient)" />
                   </Svg>
                 </Animated.View>
-                <View style={styles.userAvatarCircle}>
+                <View style={[styles.userAvatarCircle, { borderWidth: 2, borderColor: userGlowColor }]}>
                   {userPhotoUri ? <Image source={{ uri: userPhotoUri }} style={styles.userAvatarImage} /> : <Text style={styles.userAvatarInitial}>{(userName ?? "?").charAt(0)}</Text>}
                 </View>
                 {!userPhotoUri && <View style={styles.userPhotoHint}><Text style={styles.userPhotoHintText}>📷</Text></View>}
               </Pressable>
-              {userName && <Text style={styles.sideName} numberOfLines={1} ellipsizeMode="tail">{userName}</Text>}
+              {userName && <Text style={[styles.sideName, { color: userGlowColor }]} numberOfLines={1} ellipsizeMode="tail">{userName}</Text>}
             </View>
           </View>
         )}
