@@ -3,6 +3,16 @@ import os
 import re
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
+import random
+import smtplib
+from email.message import EmailMessage
+from datetime import datetime, timedelta, date
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
+from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from pydantic import BaseModel
+from sqlalchemy import func
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -26,9 +36,96 @@ from db import (
     get_engine, get_session,
 )
 
-app = FastAPI(title="Aurae")
+app = FastAPI(title="aurae")
+
+email_verification_store = {}
 
 
+def send_verification_email(to_email: str, code: str):
+    """
+    Sends a 6-digit verification code via SMTP with aurae's classic premium tone.
+    """
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = 587
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+    
+    if not smtp_user or not smtp_password:
+        # Fallback for local testing when environment variables are not yet set
+        print(f"[LOCAL TEST] Verification code for {to_email}: {code}")
+        return True
+
+    msg = EmailMessage()
+    msg["Subject"] = "[aurae] Your Verification Code"
+    msg["From"] = smtp_user
+    msg["To"] = to_email
+    msg.set_content(f"""
+    Hello,
+    
+    Thank you for choosing aurae, your intellectual and emotional companion.
+    
+    To complete your registration and secure your account, please enter the 6-digit verification code below in the application.
+    
+    Verification Code: {code}
+    
+    * This code is valid for the next 5 minutes.
+    
+    Warm regards,
+    The aurae Team
+    """)
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"SMTP Email Delivery Failed: {str(e)}")
+        return False
+
+
+@app.post("/auth/request-code", status_code=status.HTTP_200_OK)
+def request_verification_code(email: str):
+    """
+    [Endpoint 1] Triggered when the user enters their email and requests a code.
+    """
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email format.")
+        
+    code = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.utcnow() + timedelta(minutes=5)
+    
+    email_verification_store[email] = {
+        "code": code,
+        "expires_at": expires_at,
+        "verified": False
+    }
+    
+    success = send_verification_email(email, code)
+    if not success and os.environ.get("SMTP_USER"):
+        raise HTTPException(status_code=500, detail="Failed to send verification email.")
+        
+    return {"message": "Verification code sent. Please check your inbox."}
+
+@app.post("/auth/verify-code", status_code=status.HTTP_200_OK)
+def verify_code(email: str, code: str):
+    """
+    [Endpoint 2] Triggered when the user submits the 6-digit code for verification.
+    """
+    record = email_verification_store.get(email)
+    
+    if not record:
+        raise HTTPException(status_code=400, detail="No verification request found for this email.")
+        
+    if datetime.utcnow() > record["expires_at"]:
+        raise HTTPException(status_code=400, detail="The verification code has expired. Please request a new one.")
+        
+    if record["code"] != code:
+        raise HTTPException(status_code=400, detail="Incorrect verification code.")
+        
+    record["verified"] = True
+    return {"message": "Email verification completed successfully.", "verified": True}
 def get_real_ip(request: Request) -> str:
     """
     Render sits behind a reverse proxy, so request.client.host is the
@@ -1121,3 +1218,6 @@ def _refresh_insights(session, user, profile):
     if profile.relationship_level > old_level:
         return {"new_level": profile.relationship_level, "level_name": memories.level_name(profile.relationship_level)}
     return None
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
